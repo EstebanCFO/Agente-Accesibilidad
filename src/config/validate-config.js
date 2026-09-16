@@ -85,3 +85,24 @@ export function validateConfig(rawConfig) {
 
   return { valid: true, errors: [], config };
 }
+
+const REDACTED = '[REDACTED]';
+
+function redactAuthConfig(authConfig) {
+  if (!authConfig || typeof authConfig !== 'object') return authConfig;
+  const redacted = { ...authConfig };
+  if (redacted.username !== undefined) redacted.username = REDACTED;
+  if (redacted.password !== undefined) redacted.password = REDACTED;
+  if (redacted.bearer_token !== undefined) redacted.bearer_token = REDACTED;
+  if (Array.isArray(redacted.cookies)) {
+    redacted.cookies = redacted.cookies.map((cookie) => ({ ...cookie, value: REDACTED }));
+  }
+  return redacted;
+}
+
+export function redactConfig(config) {
+  return {
+    ...config,
+    auth: { ...config.auth, config: redactAuthConfig(config.auth?.config) }
+  };
+}

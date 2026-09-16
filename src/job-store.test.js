@@ -62,3 +62,9 @@ test('listJobs devuelve todos los jobs creados', () => {
   assert.equal(jobs.length, 2);
   assert.deepEqual(jobs.map((j) => j.job_id).sort(), ['job-1', 'job-2']);
 });
+
+test('createJob lanza error si el job_id ya existe', () => {
+  const store = new JobStore();
+  store.createJob(sampleConfig());
+  assert.throws(() => store.createJob(sampleConfig()), /job-1/);
+});

@@ -10,6 +10,9 @@ export class JobStore {
   }
 
   createJob(config) {
+    if (this.jobs.has(config.job_id)) {
+      throw new Error(`Job ya existe: ${config.job_id}`);
+    }
     const job = {
       job_id: config.job_id,
       status: 'pending',

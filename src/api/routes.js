@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { validateConfig } from '../config/validate-config.js';
+import { validateConfig, redactConfig } from '../config/validate-config.js';
 
 export function createRouter({ jobStore, agentLoopFactory }) {
   const router = Router();
@@ -13,8 +13,13 @@ export function createRouter({ jobStore, agentLoopFactory }) {
     if (!valid) {
       return res.status(400).json({ error: 'invalid_config', details: errors });
     }
-    const job = jobStore.createJob(config);
-    const agentLoop = agentLoopFactory();
+    let job;
+    try {
+      job = jobStore.createJob(redactConfig(config));
+    } catch (err) {
+      return res.status(409).json({ error: 'job_already_exists', details: [err.message] });
+    }
+    const agentLoop = agentLoopFactory(config);
     agentLoop.run(job.job_id).catch((err) => {
       jobStore.updateJob(job.job_id, { status: 'failed', stop_reason: err.message });
     });

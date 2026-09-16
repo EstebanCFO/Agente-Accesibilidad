@@ -24,7 +24,13 @@ async function bootstrap() {
 
   const app = createApp({
     jobStore,
-    agentLoopFactory: () => new AgentLoop({ anthropicClient, toolRegistry, jobStore })
+    agentLoopFactory: (config) => new AgentLoop({
+      anthropicClient,
+      toolRegistry,
+      jobStore,
+      maxIterations: config.agent.max_iterations,
+      model: config.agent.model
+    })
   });
 
   const port = process.env.PORT || 3000;

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateConfig } from './validate-config.js';
+import { validateConfig, redactConfig } from './validate-config.js';
 
 test('acepta un config url_list mínimo y aplica defaults', () => {
   const { valid, errors, config } = validateConfig({
@@ -59,4 +59,17 @@ test('rechaza config sin target', () => {
   const { valid, errors } = validateConfig({});
   assert.equal(valid, false);
   assert.ok(errors.some((e) => e.includes('target')));
+});
+
+test('redactConfig oculta username/password/bearer_token/cookies sin mutar el original', () => {
+  const { config } = validateConfig({
+    target: { channel: 'home_banking', mode: 'url_list', urls: ['https://x.test'] },
+    auth: { type: 'basic', config: { username: 'admin', password: 'SUPERSECRET', bearer_token: 'tok123', cookies: [{ name: 'sid', value: 'abc123', domain: 'x.test' }] } }
+  });
+  const redacted = redactConfig(config);
+  assert.equal(redacted.auth.config.username, '[REDACTED]');
+  assert.equal(redacted.auth.config.password, '[REDACTED]');
+  assert.equal(redacted.auth.config.bearer_token, '[REDACTED]');
+  assert.equal(redacted.auth.config.cookies[0].value, '[REDACTED]');
+  assert.equal(config.auth.config.password, 'SUPERSECRET');
 });
