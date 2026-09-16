@@ -433,3 +433,7 @@ Estas preguntas deben responderse antes o durante Fase 2. Si no se resuelven, el
 *Plan generado por Claude (Cowork) — CFOTech IT Global Services · Septiembre 2026*  
 *Referencia: SPEC-agente-f1-compliance-v0.3.md · Propuesta_Accesibilidad_EntidadFinanciera_v7.pptx*  
 *v1.0 → v1.1: alineación con SPEC v0.3 y la propuesta v7 (láminas 9-10 como base) — separación cronograma de construcción vs. plazo de servicio F1; decisiones D1–D7 cerradas (base WCAG 2.0 / 38 ONTI con umbral 30, WCAG 2.2 como capa opcional, matriz de dos vistas, claude-sonnet-5, XLSX en todos los jobs, consolidación multi-canal, descarte de hallazgos fuera de los 38); ACR/VPAT como entregable de F3; campo max_urls*
+
+---
+
+**Nota de estado (post Sub-plan A — Fundación):** Implementados y testeados: `validate-config.js`, `JobStore`, `tool-registry.js` (schemas de las 11 tools + `validate_config`/`log_progress`/`request_clarification` reales, resto como stubs `NotImplementedError`), `agent-loop.js` (loop real contra Claude tool-use) y la REST API mínima (`POST /api/jobs`, `GET /api/jobs/:id`, `GET /api/health`). Pendientes como sub-planes siguientes de la Fase 2: **B** crawler (`crawlee`) + scanner (`axe-core`+Playwright), **C** classifier (mapeo a los 38 ONTI) + calculate_score, **D** reporters (score/dashboard/inventario/matriz/roadmap + `xlsx-builder`), **E** skill-runner (skills externos ui-skills.com) + `consolidate_jobs` + rutas `GET /api/jobs/:id/reports`, `DELETE /api/jobs/:id`, `POST /api/jobs/consolidate`.
