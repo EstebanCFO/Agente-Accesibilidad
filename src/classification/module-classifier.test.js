@@ -15,6 +15,15 @@ test('classifyModule ignora query string y hash', () => {
   assert.equal(classifyModule('https://banco.example.com/onboarding/paso1?ref=email#top'), 'onboarding');
 });
 
-test('classifyModule devuelve la URL cruda si no se puede parsear', () => {
-  assert.equal(classifyModule('no-es-una-url'), 'no-es-una-url');
+test('classifyModule devuelve "desconocido" si la URL no se puede parsear', () => {
+  assert.equal(classifyModule('no-es-una-url'), 'desconocido');
+  assert.equal(classifyModule('//host-relativo/path'), 'desconocido');
+});
+
+test('classifyModule decodifica el segmento (ej. acentos percent-encoded)', () => {
+  assert.equal(classifyModule('https://banco.example.com/pr%C3%A9stamos/simular'), 'préstamos');
+});
+
+test('classifyModule cae al segmento crudo si el percent-encoding está mal formado', () => {
+  assert.equal(classifyModule('https://banco.example.com/mal%formado/x'), 'mal%formado');
 });

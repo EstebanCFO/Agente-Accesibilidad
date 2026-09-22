@@ -131,7 +131,7 @@ test('generateDeliverable("matriz") escribe json + html + xlsx con las dos vista
 
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(xlsxPath);
-  assert.deepEqual(workbook.worksheets.map((ws) => ws.name), ['Conformidad por módulo', 'Conformidad por URL', 'Severidad x Impacto']);
+  assert.deepEqual(workbook.worksheets.map((ws) => ws.name), ['Conformidad por módulo', 'Conformidad', 'Severidad x Impacto']);
 });
 
 test('generateDeliverable("dashboard") escribe dashboard.html con las secciones de la SPEC §8.2', async () => {

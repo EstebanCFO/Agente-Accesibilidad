@@ -26,11 +26,11 @@ function taggedCriteria(includeExtended) {
 }
 
 /**
- * Vista principal (SPEC §8.4): matriz de conformidad criterio × módulo. Sin `crawl_site`
- * todavía no existe una clasificación real de "módulo" — se usa cada URL escaneada como
- * columna (documentado). Solo distingue 'conforme'/'no_conforme': 'parcialmente_conforme'
- * (requeriría clasificar los resultados "incomplete" de axe, que classify_findings no
- * procesa hoy) y 'no_aplica' (requeriría reglas de aplicabilidad por canal) no se emiten.
+ * Vista detallada de conformidad criterio × URL individual (complementa la vista por
+ * módulo de `buildModuleConformityMatrix`). Solo distingue 'conforme'/'no_conforme':
+ * 'parcialmente_conforme' (requeriría clasificar los resultados "incomplete" de axe, que
+ * classify_findings no procesa hoy) y 'no_aplica' (requeriría reglas de aplicabilidad por
+ * canal) no se emiten.
  */
 export function buildConformityMatrix({ findings, urls, includeExtended = false }) {
   const violated = new Set();
@@ -222,7 +222,7 @@ export async function buildMatrizWorkbook({ conformity, moduleConformity, severi
   if (moduleConformity) {
     addConformitySheet(workbook, 'Conformidad por módulo', { columns: moduleConformity.modules, rows: moduleConformity.rows });
   }
-  addConformitySheet(workbook, 'Conformidad por URL', { columns: conformity.urls, rows: conformity.rows });
+  addConformitySheet(workbook, 'Conformidad', { columns: conformity.urls, rows: conformity.rows });
 
   const gridSheet = workbook.addWorksheet('Severidad x Impacto');
   gridSheet.columns = [
