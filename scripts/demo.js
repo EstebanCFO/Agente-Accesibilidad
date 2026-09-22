@@ -100,7 +100,9 @@ async function main() {
 
   header(2, 'Escanear');
   console.log('Corriendo el escaneo automático de accesibilidad...');
-  const axeResult = await scanUrl({ url: targetUrl, captureScreenshot: true, captureHtml: true });
+  // waitFor:'load' en vez del default 'networkidle' - varios sitios reales (analytics, chat
+  // widgets, polling) nunca llegan a red inactiva y cuelgan el escaneo en una demo en vivo.
+  const axeResult = await scanUrl({ url: targetUrl, captureScreenshot: true, captureHtml: true, waitFor: 'load' });
   console.log(`Escaneo terminado: ${axeResult.violation_count} problema(s) técnico(s) detectado(s), ${axeResult.pass_count} chequeo(s) aprobado(s).`);
   await page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
   await highlightOnPage(page, axeResult.violations);

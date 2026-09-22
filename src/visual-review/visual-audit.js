@@ -32,7 +32,11 @@ export async function runVisualAudit({ url, screenshot }, { anthropicClient, mod
 
   const response = await anthropicClient.messages.create({
     model,
-    max_tokens: 2048,
+    // 2048 resultó insuficiente en la práctica: la respuesta se cortaba (stop_reason:
+    // 'max_tokens') antes de completar ni un solo finding en el tool_use, perdiendo
+    // hallazgos en silencio. Confirmado con una llamada real contra un sitio de referencia
+    // (11 hallazgos completos con 8192, 0 con 2048 por corte a mitad del primer campo).
+    max_tokens: 8192,
     tools: [REPORT_FINDINGS_TOOL],
     tool_choice: { type: 'tool', name: 'report_findings' },
     messages: [{

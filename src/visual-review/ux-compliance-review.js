@@ -41,7 +41,10 @@ export async function runUxComplianceReview({ url, html, screenshot }, { anthrop
 
   const response = await anthropicClient.messages.create({
     model,
-    max_tokens: 2048,
+    // Ver nota en visual-audit.js: 2048 se cortaba a mitad del primer finding en la práctica
+    // (stop_reason:'max_tokens'), perdiendo hallazgos en silencio. Confirmado con una llamada
+    // real; 8192 alcanza para un análisis completo de la página.
+    max_tokens: 8192,
     tools: [REPORT_FINDINGS_TOOL],
     tool_choice: { type: 'tool', name: 'report_findings' },
     messages: [{ role: 'user', content }]
