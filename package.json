@@ -8,6 +8,7 @@
   },
   "scripts": {
     "start": "node src/api/server.js",
+    "demo": "node scripts/demo.js",
     "test": "node --test"
   },
   "dependencies": {
