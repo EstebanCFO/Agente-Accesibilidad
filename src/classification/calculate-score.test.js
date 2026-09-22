@@ -1,0 +1,119 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { calculateScore } from './calculate-score.js';
+
+function finding(wcagCriterion, level, inScope, affectedUrls) {
+  return {
+    id: `finding-${wcagCriterion}`,
+    wcag_criterion: wcagCriterion,
+    wcag_level: level,
+    onti_criterion: inScope === 'onti',
+    in_scope: inScope,
+    severity: 'serious',
+    rule_id: `rule-${wcagCriterion}`,
+    affected_urls: affectedUrls,
+    occurrences: affectedUrls.length
+  };
+}
+
+test('calculateScore: sin findings, todo conforme (38/38, 100%)', () => {
+  const axeResults = [
+    { url: 'https://a.test', violation_count: 0, incomplete_count: 0, violations: [] },
+    { url: 'https://b.test', violation_count: 0, incomplete_count: 0, violations: [] }
+  ];
+  const { summary, extended_22, by_url } = calculateScore([], { axeResults });
+
+  assert.equal(summary.total_urls_evaluated, 2);
+  assert.equal(summary.onti_criteria_evaluated, 38);
+  assert.equal(summary.onti_criteria_compliant, 38);
+  assert.equal(summary.onti_compliance_percentage, 100);
+  assert.equal(summary.onti_conformance, true);
+  assert.equal(summary.score_level_a, 100);
+  assert.equal(summary.score_level_aa, 100);
+  assert.equal(extended_22, null);
+  assert.equal(by_url.length, 2);
+  for (const entry of by_url) {
+    assert.equal(entry.onti_compliance_percentage, 100);
+    assert.equal(entry.violations, 0);
+  }
+});
+
+test('calculateScore: un criterio A violado en ambas URLs baja el score global y de nivel A', () => {
+  const findings = [finding('1.1.1', 'A', 'onti', ['https://a.test', 'https://b.test'])];
+  const axeResults = [
+    { url: 'https://a.test', violation_count: 3, incomplete_count: 0 },
+    { url: 'https://b.test', violation_count: 1, incomplete_count: 0 }
+  ];
+
+  const { summary, by_url } = calculateScore(findings, { axeResults });
+
+  assert.equal(summary.onti_criteria_compliant, 37);
+  assert.equal(summary.onti_compliance_percentage, Math.round((37 / 38) * 10000) / 100);
+  assert.equal(summary.score_level_a, Math.round((24 / 25) * 10000) / 100);
+  assert.equal(summary.score_level_aa, 100);
+  for (const entry of by_url) {
+    assert.equal(entry.onti_compliance_percentage, Math.round((37 / 38) * 10000) / 100);
+  }
+});
+
+test('calculateScore: onti_conformance respeta el umbral configurado', () => {
+  // 10 criterios violados -> 28 conformes: por debajo del umbral default (30) pero no de uno más laxo.
+  const violated = ['1.1.1', '1.2.1', '1.2.2', '1.2.3', '1.3.1', '1.3.2', '1.3.3', '1.4.1', '1.4.2', '2.1.1'];
+  const findings = violated.map((c) => finding(c, 'A', 'onti', ['https://a.test']));
+
+  const bajoDefault = calculateScore(findings, { axeResults: [{ url: 'https://a.test', violation_count: 10, incomplete_count: 0 }] });
+  assert.equal(bajoDefault.summary.onti_criteria_compliant, 28);
+  assert.equal(bajoDefault.summary.onti_conformance, false);
+
+  const conUmbralMasBajo = calculateScore(findings, {
+    axeResults: [{ url: 'https://a.test', violation_count: 10, incomplete_count: 0 }],
+    conformanceThreshold: 25
+  });
+  assert.equal(conUmbralMasBajo.summary.onti_conformance, true);
+});
+
+test('calculateScore: un hallazgo que afecta solo una URL da percentages distintos por URL', () => {
+  const findings = [finding('1.4.3', 'AA', 'onti', ['https://a.test'])];
+  const axeResults = [
+    { url: 'https://a.test', violation_count: 1, incomplete_count: 0 },
+    { url: 'https://b.test', violation_count: 0, incomplete_count: 0 }
+  ];
+  const { by_url } = calculateScore(findings, { axeResults });
+
+  const a = by_url.find((e) => e.url === 'https://a.test');
+  const b = by_url.find((e) => e.url === 'https://b.test');
+  assert.ok(a.onti_compliance_percentage < 100);
+  assert.equal(b.onti_compliance_percentage, 100);
+});
+
+test('calculateScore: extended_22 queda null si includeExtended=false, aunque haya findings extendidos', () => {
+  const findings = [finding('2.5.8', 'AA', 'extended_22', ['https://a.test'])];
+  const { extended_22 } = calculateScore(findings, { includeExtended: false });
+  assert.equal(extended_22, null);
+});
+
+test('calculateScore: extended_22 se calcula sobre los 18 criterios cuando includeExtended=true', () => {
+  const findings = [finding('2.5.8', 'AA', 'extended_22', ['https://a.test'])];
+  const { extended_22 } = calculateScore(findings, { includeExtended: true });
+
+  assert.equal(extended_22.criteria_evaluated, 18);
+  assert.equal(extended_22.criteria_compliant, 17);
+  const entry = extended_22.by_criterion.find((c) => c.wcag_criterion === '2.5.8');
+  assert.equal(entry.compliant, false);
+});
+
+test('calculateScore: sin axeResults, aproxima total_urls_evaluated con la unión de affected_urls', () => {
+  const findings = [
+    finding('1.1.1', 'A', 'onti', ['https://a.test']),
+    finding('1.4.3', 'AA', 'onti', ['https://b.test', 'https://c.test'])
+  ];
+  const { summary } = calculateScore(findings);
+  assert.equal(summary.total_urls_evaluated, 3);
+});
+
+test('calculateScore: lista vacía de findings y sin axeResults no rompe', () => {
+  const { summary, by_url } = calculateScore([]);
+  assert.equal(summary.total_urls_evaluated, 0);
+  assert.equal(summary.onti_criteria_compliant, 38);
+  assert.deepEqual(by_url, []);
+});
