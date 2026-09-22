@@ -39,6 +39,7 @@ test('runUxComplianceReview incluye la screenshot como bloque opcional si se pas
   const [params] = client.calls;
   const content = params.messages[0].content;
   assert.ok(content.some((block) => block.type === 'image' && block.source.data === 'ZmFrZQ=='));
+  assert.ok(content.some((block) => block.type === 'text' && block.text.includes(SAMPLE_HTML)));
 });
 
 test('runUxComplianceReview normaliza los findings del tool_use con source "ux_review"', async () => {
