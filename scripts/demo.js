@@ -153,7 +153,7 @@ async function main() {
   header(4, 'Revisión visual con IA');
   const visualFindings = [];
   for (const axeResult of axeResults) {
-    console.log(`\nMandando la captura de ${axeResult.url} a la IA con visión (esto puede tardar unos segundos)...`);
+    console.log(`\nMandando la captura de ${axeResult.url} a la IA (esto puede tardar unos segundos)...`);
     const { visual_findings } = await runVisualAudit({ url: axeResult.url, screenshot: axeResult.screenshot }, { anthropicClient });
     console.log(`  ${visual_findings.length} hallazgo(s) visual(es) adicional(es).`);
     for (const f of visual_findings.slice(0, 3)) console.log(`    • [${f.severity}] ${f.failure_summary}`);
