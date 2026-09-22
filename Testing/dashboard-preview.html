@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Dashboard Ejecutivo — job-demo-visual</title>
+<style>
+  :root {
+    --surface: #fcfcfb; --page: #f9f9f7; --ink: #0b0b0b; --ink-secondary: #52514e;
+    --muted: #898781; --gridline: #e1e0d9; --border: rgba(11,11,11,0.10);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --surface: #1a1a19; --page: #0d0d0d; --ink: #ffffff; --ink-secondary: #c3c2b7; --gridline: #2c2c2a; --border: rgba(255,255,255,0.10); }
+  }
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; margin: 0; background: var(--page); color: var(--ink); }
+  header { background: #14213d; color: #fff; padding: 1.5rem 2rem; display: flex; align-items: baseline; gap: 1rem; }
+  header .brand { font-weight: 700; letter-spacing: 0.02em; }
+  header .brand .accent { color: #4caf6a; }
+  header .title { font-size: 1.1rem; font-weight: 600; }
+  main { max-width: 1100px; margin: 0 auto; padding: 1.5rem 2rem 3rem; }
+  .meta { color: var(--ink-secondary); margin-bottom: 1.5rem; font-size: 0.9rem; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; }
+  h2 { font-size: 1rem; margin: 0 0 0.75rem; color: var(--ink); }
+  .muted { color: var(--muted); font-size: 0.85rem; }
+  .stat-row { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+  .stat-tile { min-width: 140px; }
+  .stat-label { font-size: 0.8rem; color: var(--ink-secondary); }
+  .stat-value { font-size: 2rem; font-weight: 600; }
+  .stat-sublabel { font-size: 0.8rem; color: var(--muted); }
+  .hero { font-size: 3rem; font-weight: 700; line-height: 1; }
+  .badge { font-weight: 700; }
+  .pill { font-size: 0.7rem; font-weight: 600; background: var(--gridline); color: var(--ink-secondary); border-radius: 999px; padding: 2px 10px; margin-left: 0.5rem; vertical-align: middle; }
+  .meter-track { height: 20px; background: var(--gridline); border-radius: 4px; overflow: hidden; }
+  .meter-fill { height: 100%; border-radius: 0 4px 4px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
+  th, td { border: 1px solid var(--gridline); padding: 6px 10px; text-align: left; }
+  th { background: var(--page); color: var(--ink-secondary); font-weight: 600; }
+  .hbar-chart { display: flex; flex-direction: column; gap: 6px; }
+  .hbar-row { display: grid; grid-template-columns: 260px 1fr 48px; align-items: center; gap: 8px; }
+  .hbar-label { font-size: 0.8rem; color: var(--ink-secondary); overflow-wrap: break-word; line-height: 1.25; }
+  .hbar-track { background: var(--gridline); height: 18px; border-radius: 4px; overflow: hidden; }
+  .hbar-fill { height: 100%; border-radius: 0 4px 4px 0; }
+  .hbar-value { font-size: 0.8rem; color: var(--ink-secondary); text-align: right; }
+  .empty { color: var(--muted); font-size: 0.85rem; }
+  .severity-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
+  footer { color: var(--muted); font-size: 0.75rem; padding: 0 2rem 2rem; max-width: 1100px; margin: 0 auto; }
+</style>
+</head>
+<body>
+  <header>
+    <span class="brand">CFOTech<span class="accent">.</span></span>
+    <span class="title">Dashboard Ejecutivo de Accesibilidad</span>
+  </header>
+  <main>
+    <p class="meta">Job: job-demo-visual · Canal: home_banking · Generado: 2026-09-18T19:51:18.337Z</p>
+
+    <section class="card">
+      <h2>Score de cumplimiento ONTI</h2>
+      <div class="hero">29/38 <small style="font-size:1.2rem; color:var(--ink-secondary)">(76.32%)</small></div>
+      <div class="meter" role="img" aria-label="76.32% de criterios ONTI conformes">
+    <div class="meter-track"><div class="meter-fill" style="width:76.3%; background:#d03b3b"></div></div>
+  </div>
+      <p class="muted"><span class="badge" style="color:#d03b3b"><span aria-hidden="true">✕</span> NO CONFORME</span> — umbral regulatorio: ≥ 30/38</p>
+      <div class="stat-row">
+        <div class="stat-tile">
+    <div class="stat-label">Nivel A (25 criterios)</div>
+    <div class="stat-value">80%</div>
+    
+  </div>
+        <div class="stat-tile">
+    <div class="stat-label">Nivel AA (13 criterios)</div>
+    <div class="stat-value">69.23%</div>
+    
+  </div>
+        <div class="stat-tile">
+    <div class="stat-label">URLs evaluadas</div>
+    <div class="stat-value">4</div>
+    
+  </div>
+      </div>
+      <p class="muted">Score sobre los 38 criterios ONTI por detección automática (~57% de barreras). Los criterios que requieren AT reales se evalúan en F2. Base: ONTI 6/2019 — WCAG 2.0 A+AA (38 criterios).</p>
+    </section>
+
+    <section class="card">
+      <h2>Hallazgos por severidad</h2>
+      <table>
+        <thead><tr><th>Severidad</th><th>Cantidad</th></tr></thead>
+        <tbody>
+          <tr><td><span class="severity-swatch" style="background:#d03b3b"></span>Crítica</td><td>2</td></tr>
+<tr><td><span class="severity-swatch" style="background:#ec835a"></span>Seria</td><td>2</td></tr>
+<tr><td><span class="severity-swatch" style="background:#fab219"></span>Moderada</td><td>2</td></tr>
+<tr><td><span class="severity-swatch" style="background:#898781"></span>Menor</td><td>0</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>Top 10 criterios ONTI más vulnerados</h2>
+      <div class="hbar-chart">
+    <div class="hbar-row">
+        <div class="hbar-label">1.1.1 — Contenido no textual</div>
+        <div class="hbar-track"><div class="hbar-fill" style="width:100%; background:#2a78d6" title="1.1.1 — Contenido no textual: 12"></div></div>
+        <div class="hbar-value">12</div>
+      </div>
+<div class="hbar-row">
+        <div class="hbar-label">1.4.3 — Contraste (mínimo)</div>
+        <div class="hbar-track"><div class="hbar-fill" style="width:75%; background:#2a78d6" title="1.4.3 — Contraste (mínimo): 9"></div></div>
+        <div class="hbar-value">9</div>
+      </div>
+<div class="hbar-row">
+        <div class="hbar-label">4.1.2 — Nombre, función, valor</div>
+        <div class="hbar-track"><div class="hbar-fill" style="width:50%; background:#2a78d6" title="4.1.2 — Nombre, función, valor: 6"></div></div>
+        <div class="hbar-value">6</div>
+      </div>
+<div class="hbar-row">
+        <div class="hbar-label">2.4.4 — Propósito de los enlaces</div>
+        <div class="hbar-track"><div class="hbar-fill" style="width:33.3%; background:#2a78d6" title="2.4.4 — Propósito de los enlaces: 4"></div></div>
+        <div class="hbar-value">4</div>
+      </div>
+<div class="hbar-row">
+        <div class="hbar-label">3.1.1 — Idioma de la página</div>
+        <div class="hbar-track"><div class="hbar-fill" style="width:8.3%; background:#2a78d6" title="3.1.1 — Idioma de la página: 1"></div></div>
+        <div class="hbar-value">1</div>
+      </div>
+  </div>
+    </section>
+
+    <section class="card">
+      <h2>Distribución por URL</h2>
+      <p class="muted">Sin clasificación de módulo real todavía (pendiente de <code>crawl_site</code>) — se muestra por URL escaneada.</p>
+      <div class="hbar-chart">
+    <div class="hbar-row">
+        <div class="hbar-label">https://homebanking.entidad.test/login</div>
+        <div class="hbar-track"><div class="hbar-fill" style="width:100%; background:#2a78d6" title="https://homebanking.entidad.test/login: 7"></div></div>
+        <div class="hbar-value">7</div>
+      </div>
+<div class="hbar-row">
+        <div class="hbar-label">https://homebanking.entidad.test/transferencias</div>
+        <div class="hbar-track"><div class="hbar-fill" style="width:42.9%; background:#2a78d6" title="https://homebanking.entidad.test/transferencias: 3"></div></div>
+        <div class="hbar-value">3</div>
+      </div>
+<div class="hbar-row">
+        <div class="hbar-label">https://homebanking.entidad.test/resumen</div>
+        <div class="hbar-track"><div class="hbar-fill" style="width:28.6%; background:#2a78d6" title="https://homebanking.entidad.test/resumen: 2"></div></div>
+        <div class="hbar-value">2</div>
+      </div>
+<div class="hbar-row">
+        <div class="hbar-label">https://homebanking.entidad.test/tarjetas</div>
+        <div class="hbar-track"><div class="hbar-fill" style="width:0%; background:#2a78d6" title="https://homebanking.entidad.test/tarjetas: 0"></div></div>
+        <div class="hbar-value">0</div>
+      </div>
+  </div>
+    </section>
+
+    <section class="card">
+      <h2>Hallazgos visuales / UX</h2>
+      <p class="empty">No disponible — los skills externos (visual_audit / ux_compliance_review) todavía no están integrados en el agente.</p>
+    </section>
+
+    <section class="card">
+    <h2>Capa extendida WCAG 2.2 <span class="pill">No exigida por BCRA/ONTI</span></h2>
+    <p class="muted">Score separado — no incide en el compliance ONTI de arriba.</p>
+    <div class="stat-row">
+      <div class="stat-tile">
+    <div class="stat-label">Criterios conformes</div>
+    <div class="stat-value">17/18</div>
+    
+  </div>
+      <div class="stat-tile">
+    <div class="stat-label">Compliance</div>
+    <div class="stat-value">94.44%</div>
+    
+  </div>
+    </div>
+  </section>
+  </main>
+  <footer>
+    Generado automáticamente por el Agente F1 de Compliance de Accesibilidad — CFOTech.
+  </footer>
+</body>
+</html>
