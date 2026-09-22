@@ -4,7 +4,7 @@ export const COVERAGE_NOTE = 'Score sobre los 38 criterios ONTI por detección a
 
 /**
  * Envuelve la salida de calculateScore() con el envelope de job que pide SPEC §8.1
- * (score-compliance.json). calculateScore ya deja summary/extended_22/by_url listos.
+ * (score-compliance.json). calculateScore ya deja summary/extended_22/by_url/by_module listos.
  */
 export function buildScoreDeliverable({ jobId, channel, scores }) {
   return {
@@ -15,6 +15,7 @@ export function buildScoreDeliverable({ jobId, channel, scores }) {
     coverage_note: COVERAGE_NOTE,
     summary: scores.summary,
     extended_22: scores.extended_22,
-    by_url: scores.by_url
+    by_url: scores.by_url,
+    by_module: scores.by_module
   };
 }

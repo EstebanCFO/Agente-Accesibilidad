@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 import { ontiCriteria, extendedCriteria } from '../classification/wcag-map.js';
+import { classifyModule } from '../classification/module-classifier.js';
 
 const SEVERITY_ORDER = ['critical', 'serious', 'moderate', 'minor'];
 const IMPACT_ORDER = ['bloqueante', 'degradado', 'menor'];
@@ -55,6 +56,39 @@ export function buildConformityMatrix({ findings, urls, includeExtended = false 
 }
 
 /**
+ * Vista adicional: mismo criterio de conformidad que `buildConformityMatrix`, pero agrupando
+ * columnas por módulo (primer segmento de path, ver module-classifier.js) en vez de por URL
+ * individual. Un módulo hereda 'no_conforme' de cualquiera de sus URLs (peor caso), mismo
+ * criterio que ya usa calculate-score.js para by_module.
+ */
+export function buildModuleConformityMatrix({ findings, urls, includeExtended = false }) {
+  const urlToModule = new Map(urls.map((url) => [url, classifyModule(url)]));
+  const modules = [...new Set(urls.map((url) => urlToModule.get(url)))];
+
+  const violated = new Set();
+  for (const finding of findings) {
+    if (finding.in_scope !== 'onti' && !(includeExtended && finding.in_scope === 'extended_22')) continue;
+    for (const url of finding.affected_urls || []) {
+      const module = urlToModule.get(url) ?? classifyModule(url);
+      violated.add(`${module}::${finding.wcag_criterion}`);
+    }
+  }
+
+  const rows = taggedCriteria(includeExtended).map((criterion) => ({
+    wcag_criterion: criterion.wcag_criterion,
+    level: criterion.level,
+    in_scope: criterion.in_scope,
+    description: criterion.description,
+    cells: Object.fromEntries(modules.map((module) => [
+      module,
+      violated.has(`${module}::${criterion.wcag_criterion}`) ? 'no_conforme' : 'conforme'
+    ]))
+  }));
+
+  return { modules, rows };
+}
+
+/**
  * Vista secundaria (SPEC §8.4): grilla severidad × impacto, con conteo de hallazgos por
  * cuadrante y los ids de esos findings para el drill-down al inventario.
  */
@@ -76,12 +110,13 @@ export function buildSeverityImpactGrid(findings) {
   return grid;
 }
 
-export function buildMatrizJson({ jobId, channel, conformity, severityImpactGrid }) {
+export function buildMatrizJson({ jobId, channel, conformity, moduleConformity, severityImpactGrid }) {
   return {
     job_id: jobId,
     channel: channel ?? null,
     generated_at: new Date().toISOString(),
     conformity_matrix: conformity,
+    module_conformity_matrix: moduleConformity ?? null,
     severity_impact_grid: severityImpactGrid
   };
 }
@@ -92,11 +127,11 @@ function escapeHtml(value) {
   }[char]));
 }
 
-function conformityTableHtml(conformity) {
-  const headerCells = conformity.urls.map((url) => `<th>${escapeHtml(url)}</th>`).join('');
-  const bodyRows = conformity.rows.map((row) => {
-    const cells = conformity.urls.map((url) => {
-      const status = row.cells[url];
+function conformityTableHtml({ columns, rows }) {
+  const headerCells = columns.map((column) => `<th>${escapeHtml(column)}</th>`).join('');
+  const bodyRows = rows.map((row) => {
+    const cells = columns.map((column) => {
+      const status = row.cells[column];
       return `<td class="status-${status}">${status === 'conforme' ? 'Conforme' : 'No conforme'}</td>`;
     }).join('');
     return `<tr>
@@ -126,7 +161,12 @@ function severityImpactTableHtml(grid) {
   </table>`;
 }
 
-export function buildMatrizHtml({ jobId, channel, conformity, severityImpactGrid }) {
+export function buildMatrizHtml({ jobId, channel, conformity, moduleConformity, severityImpactGrid }) {
+  const moduleSectionHtml = moduleConformity ? `
+  <h2>Vista por módulo — Conformidad por criterio × módulo</h2>
+  <p class="meta">Módulo derivado del primer segmento del path de cada URL escaneada (ver <code>module-classifier.js</code>). Un módulo hereda "No conforme" si cualquiera de sus URLs lo está.</p>
+  ${conformityTableHtml({ columns: moduleConformity.modules, rows: moduleConformity.rows })}` : '';
+
   return `<!doctype html>
 <html lang="es">
 <head>
@@ -147,10 +187,9 @@ export function buildMatrizHtml({ jobId, channel, conformity, severityImpactGrid
 <body>
   <h1>Matriz de Criticidad</h1>
   <p class="meta">Job: ${escapeHtml(jobId)} · Canal: ${escapeHtml(channel ?? 'N/D')} · Generado: ${new Date().toISOString()}</p>
-
-  <h2>Vista principal — Conformidad por criterio × URL</h2>
-  <p class="meta">Nota: sin clasificación de módulo real todavía (pendiente de <code>crawl_site</code>), cada columna es una URL escaneada.</p>
-  ${conformityTableHtml(conformity)}
+  ${moduleSectionHtml}
+  <h2>Vista detallada — Conformidad por criterio × URL</h2>
+  ${conformityTableHtml({ columns: conformity.urls, rows: conformity.rows })}
 
   <h2>Vista secundaria — Severidad × Impacto</h2>
   ${severityImpactTableHtml(severityImpactGrid)}
@@ -158,24 +197,32 @@ export function buildMatrizHtml({ jobId, channel, conformity, severityImpactGrid
 </html>`;
 }
 
-export async function buildMatrizWorkbook({ conformity, severityImpactGrid }) {
-  const workbook = new ExcelJS.Workbook();
-
-  const conformitySheet = workbook.addWorksheet('Conformidad');
-  conformitySheet.columns = [
+function addConformitySheet(workbook, name, { columns, rows }) {
+  const sheet = workbook.addWorksheet(name);
+  sheet.columns = [
     { header: 'Criterio WCAG', key: 'wcag_criterion', width: 14 },
     { header: 'Nivel', key: 'level', width: 8 },
     { header: 'Alcance', key: 'in_scope', width: 14 },
     { header: 'Descripción', key: 'description', width: 32 },
-    ...conformity.urls.map((url, index) => ({ header: url, key: `url_${index}`, width: 18 }))
+    ...columns.map((column, index) => ({ header: column, key: `col_${index}`, width: 18 }))
   ];
-  conformitySheet.addRows(conformity.rows.map((row) => {
+  sheet.addRows(rows.map((row) => {
     const rowData = { wcag_criterion: row.wcag_criterion, level: row.level, in_scope: row.in_scope, description: row.description };
-    conformity.urls.forEach((url, index) => {
-      rowData[`url_${index}`] = row.cells[url] === 'conforme' ? 'Conforme' : 'No conforme';
+    columns.forEach((column, index) => {
+      rowData[`col_${index}`] = row.cells[column] === 'conforme' ? 'Conforme' : 'No conforme';
     });
     return rowData;
   }));
+  return sheet;
+}
+
+export async function buildMatrizWorkbook({ conformity, moduleConformity, severityImpactGrid }) {
+  const workbook = new ExcelJS.Workbook();
+
+  if (moduleConformity) {
+    addConformitySheet(workbook, 'Conformidad por módulo', { columns: moduleConformity.modules, rows: moduleConformity.rows });
+  }
+  addConformitySheet(workbook, 'Conformidad por URL', { columns: conformity.urls, rows: conformity.rows });
 
   const gridSheet = workbook.addWorksheet('Severidad x Impacto');
   gridSheet.columns = [

@@ -98,7 +98,7 @@ function extendedBlockHtml(extended22) {
 }
 
 export function buildDashboardHtml({ jobId, channel, scores, findings }) {
-  const { summary, extended_22: extended22, by_url: byUrl } = scores;
+  const { summary, extended_22: extended22, by_url: byUrl, by_module: byModule = [] } = scores;
   const sevCounts = severityCounts(findings);
   const topCriteria = topOntiCriteria(findings);
 
@@ -195,8 +195,18 @@ export function buildDashboardHtml({ jobId, channel, scores, findings }) {
     </section>
 
     <section class="card">
+      <h2>Distribución por módulo</h2>
+      <p class="muted">Módulo derivado del primer segmento del path de cada URL escaneada.</p>
+      ${horizontalBarChart(byModule, {
+        valueKey: 'violations',
+        labelFn: (r) => r.module,
+        color: SEQUENTIAL_BLUE
+      })}
+    </section>
+
+    <section class="card">
       <h2>Distribución por URL</h2>
-      <p class="muted">Sin clasificación de módulo real todavía (pendiente de <code>crawl_site</code>) — se muestra por URL escaneada.</p>
+      <p class="muted">Detalle por URL individual dentro de cada módulo.</p>
       ${horizontalBarChart(byUrl, {
         valueKey: 'violations',
         labelFn: (r) => r.url,

@@ -18,7 +18,8 @@ const SAMPLE_SCORES = {
     score_level_aa: 76.92
   },
   extended_22: null,
-  by_url: []
+  by_url: [],
+  by_module: [{ module: 'home-banking', url_count: 2, onti_compliance_percentage: 78.95, violations: 4, incomplete: 0 }]
 };
 
 test('generateDeliverable("score") escribe score-compliance.json con el envelope de job', async () => {
@@ -36,6 +37,7 @@ test('generateDeliverable("score") escribe score-compliance.json con el envelope
   assert.ok(doc.generated_at);
   assert.deepEqual(doc.summary, SAMPLE_SCORES.summary);
   assert.equal(doc.extended_22, null);
+  assert.deepEqual(doc.by_module, SAMPLE_SCORES.by_module);
 });
 
 test('generateDeliverable("inventario") escribe json + xlsx con las 4 hojas', async () => {
@@ -118,13 +120,18 @@ test('generateDeliverable("matriz") escribe json + html + xlsx con las dos vista
   assert.equal(criterio111.cells['https://a.test'], 'no_conforme');
   assert.equal(criterio111.cells['https://b.test'], 'conforme');
   assert.equal(jsonDoc.severity_impact_grid.length, 12);
+  // https://a.test y https://b.test no tienen path -> ambas caen en el módulo 'raiz'.
+  assert.deepEqual(jsonDoc.module_conformity_matrix.modules, ['raiz']);
+  assert.equal(jsonDoc.module_conformity_matrix.rows.length, 38);
+  assert.equal(jsonDoc.module_conformity_matrix.rows.find((r) => r.wcag_criterion === '1.1.1').cells.raiz, 'no_conforme');
 
   const html = await readFile(htmlPath, 'utf8');
   assert.match(html, /Matriz de Criticidad/);
+  assert.match(html, /por módulo/i);
 
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(xlsxPath);
-  assert.deepEqual(workbook.worksheets.map((ws) => ws.name), ['Conformidad', 'Severidad x Impacto']);
+  assert.deepEqual(workbook.worksheets.map((ws) => ws.name), ['Conformidad por módulo', 'Conformidad por URL', 'Severidad x Impacto']);
 });
 
 test('generateDeliverable("dashboard") escribe dashboard.html con las secciones de la SPEC §8.2', async () => {
@@ -137,8 +144,12 @@ test('generateDeliverable("dashboard") escribe dashboard.html con las secciones 
     },
     extended_22: { criteria_evaluated: 18, criteria_compliant: 17, compliance_percentage: 94.44, by_criterion: [] },
     by_url: [
-      { url: 'https://a.test', module: null, onti_compliance_percentage: 76.32, violations: 3, incomplete: 0 },
-      { url: 'https://b.test', module: null, onti_compliance_percentage: 100, violations: 0, incomplete: 0 }
+      { url: 'https://a.test/home-banking/pago', module: 'home-banking', onti_compliance_percentage: 76.32, violations: 3, incomplete: 0 },
+      { url: 'https://b.test', module: 'raiz', onti_compliance_percentage: 100, violations: 0, incomplete: 0 }
+    ],
+    by_module: [
+      { module: 'home-banking', url_count: 1, onti_compliance_percentage: 76.32, violations: 3, incomplete: 0 },
+      { module: 'raiz', url_count: 1, onti_compliance_percentage: 100, violations: 0, incomplete: 0 }
     ]
   };
   const findings = [
@@ -156,7 +167,8 @@ test('generateDeliverable("dashboard") escribe dashboard.html con las secciones 
   assert.match(html, /NO CONFORME/);
   assert.match(html, /Capa extendida WCAG 2\.2/);
   assert.match(html, /Top 10 criterios ONTI más vulnerados/);
-  assert.match(html, /crawl_site/);
+  assert.match(html, /Distribución por módulo/);
+  assert.match(html, /home-banking/);
   assert.match(html, /No disponible — los skills externos/);
 });
 

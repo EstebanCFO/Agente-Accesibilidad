@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildConformityMatrix, buildSeverityImpactGrid, buildMatrizHtml } from './matriz-deliverable.js';
+import { buildConformityMatrix, buildModuleConformityMatrix, buildSeverityImpactGrid, buildMatrizHtml } from './matriz-deliverable.js';
 
 function finding(overrides) {
   return {
@@ -74,10 +74,23 @@ test('buildSeverityImpactGrid: un finding ONTI nivel AA cae en degradado, y exte
   assert.equal(grid.find((c) => c.severity === 'serious' && c.impacto === 'menor').findings_count, 1);
 });
 
-test('buildMatrizHtml incluye la nota sobre URLs como stand-in de módulo', () => {
+test('buildMatrizHtml incluye la vista por módulo además de la vista por URL', () => {
   const conformity = buildConformityMatrix({ findings: [], urls: ['https://a.test'] });
+  const moduleConformity = buildModuleConformityMatrix({ findings: [], urls: ['https://a.test'] });
   const grid = buildSeverityImpactGrid([]);
-  const html = buildMatrizHtml({ jobId: 'job-1', channel: 'home_banking', conformity, severityImpactGrid: grid });
-  assert.match(html, /crawl_site/);
+  const html = buildMatrizHtml({ jobId: 'job-1', channel: 'home_banking', conformity, moduleConformity, severityImpactGrid: grid });
   assert.match(html, /Matriz de Criticidad/);
+  assert.match(html, /módulo/i);
+});
+
+test('buildModuleConformityMatrix agrupa URLs del mismo módulo y hereda no_conforme de cualquiera de ellas', () => {
+  const findings = [finding({ affected_urls: ['https://a.test/home-banking/pago'] })];
+  const urls = ['https://a.test/home-banking/pago', 'https://a.test/home-banking/transferencias', 'https://a.test/onboarding/paso1'];
+
+  const { modules, rows } = buildModuleConformityMatrix({ findings, urls });
+
+  assert.deepEqual([...modules].sort(), ['home-banking', 'onboarding']);
+  const criterio111 = rows.find((r) => r.wcag_criterion === '1.1.1');
+  assert.equal(criterio111.cells['home-banking'], 'no_conforme');
+  assert.equal(criterio111.cells['onboarding'], 'conforme');
 });

@@ -1,4 +1,5 @@
 import { ontiCriteria, extendedCriteria } from './wcag-map.js';
+import { classifyModule } from './module-classifier.js';
 
 function round2(n) {
   return Math.round(n * 100) / 100;
@@ -51,10 +52,33 @@ export function calculateScore(classifiedFindings, {
     const compliantForUrl = ontiCriteria.length - violatedForUrl.size;
     return {
       url,
-      module: null,
+      module: classifyModule(url),
       onti_compliance_percentage: percentage(compliantForUrl, ontiCriteria.length),
       violations: axeResult?.violation_count ?? 0,
       incomplete: axeResult?.incomplete_count ?? 0
+    };
+  });
+
+  const urlsByModule = new Map();
+  for (const entry of byUrl) {
+    if (!urlsByModule.has(entry.module)) urlsByModule.set(entry.module, []);
+    urlsByModule.get(entry.module).push(entry);
+  }
+
+  const byModule = [...urlsByModule.entries()].map(([module, entries]) => {
+    const moduleUrls = new Set(entries.map((e) => e.url));
+    const violatedForModule = new Set(
+      ontiFindings
+        .filter((f) => (f.affected_urls || []).some((url) => moduleUrls.has(url)))
+        .map((f) => f.wcag_criterion)
+    );
+    const compliantForModule = ontiCriteria.length - violatedForModule.size;
+    return {
+      module,
+      url_count: entries.length,
+      onti_compliance_percentage: percentage(compliantForModule, ontiCriteria.length),
+      violations: entries.reduce((sum, e) => sum + e.violations, 0),
+      incomplete: entries.reduce((sum, e) => sum + e.incomplete, 0)
     };
   });
 
@@ -88,6 +112,7 @@ export function calculateScore(classifiedFindings, {
       score_level_aa: scoreForLevel('AA')
     },
     extended_22: extended22,
-    by_url: byUrl
+    by_url: byUrl,
+    by_module: byModule
   };
 }

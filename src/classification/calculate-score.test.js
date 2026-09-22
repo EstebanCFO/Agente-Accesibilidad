@@ -117,3 +117,31 @@ test('calculateScore: lista vacía de findings y sin axeResults no rompe', () =>
   assert.equal(summary.onti_criteria_compliant, 38);
   assert.deepEqual(by_url, []);
 });
+
+test('calculateScore: by_url trae el módulo real derivado de la URL (no null)', () => {
+  const axeResults = [
+    { url: 'https://a.test/home-banking/pago', violation_count: 0, incomplete_count: 0 }
+  ];
+  const { by_url } = calculateScore([], { axeResults });
+  assert.equal(by_url[0].module, 'home-banking');
+});
+
+test('calculateScore: by_module agrega URLs del mismo módulo con criterio peor-caso', () => {
+  const findings = [
+    finding('1.1.1', 'A', 'onti', ['https://a.test/home-banking/pago'])
+  ];
+  const axeResults = [
+    { url: 'https://a.test/home-banking/pago', violation_count: 1, incomplete_count: 0 },
+    { url: 'https://a.test/home-banking/transferencias', violation_count: 0, incomplete_count: 0 },
+    { url: 'https://a.test/onboarding/paso1', violation_count: 0, incomplete_count: 0 }
+  ];
+
+  const { by_module } = calculateScore(findings, { axeResults });
+
+  const homeBanking = by_module.find((m) => m.module === 'home-banking');
+  const onboarding = by_module.find((m) => m.module === 'onboarding');
+  assert.equal(homeBanking.url_count, 2);
+  assert.ok(homeBanking.onti_compliance_percentage < 100, 'el módulo hereda la violación de cualquiera de sus URLs');
+  assert.equal(onboarding.url_count, 1);
+  assert.equal(onboarding.onti_compliance_percentage, 100);
+});

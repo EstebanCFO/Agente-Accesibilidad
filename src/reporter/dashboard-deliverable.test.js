@@ -10,7 +10,8 @@ function baseScores(overrides = {}) {
       score_level_a: 100, score_level_aa: 100
     },
     extended_22: null,
-    by_url: [{ url: 'https://a.test', module: null, onti_compliance_percentage: 100, violations: 0, incomplete: 0 }],
+    by_url: [{ url: 'https://a.test/home-banking/pago', module: 'home-banking', onti_compliance_percentage: 100, violations: 0, incomplete: 0 }],
+    by_module: [{ module: 'home-banking', url_count: 1, onti_compliance_percentage: 100, violations: 0, incomplete: 0 }],
     ...overrides
   };
 }
@@ -61,4 +62,10 @@ test('buildDashboardHtml no depende de red (sin <script src> ni <link> externos)
   const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: baseScores(), findings: [] });
   assert.doesNotMatch(html, /<script[^>]+src=/i);
   assert.doesNotMatch(html, /<link[^>]+href="https?:/i);
+});
+
+test('buildDashboardHtml incluye la distribución por módulo', () => {
+  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: baseScores(), findings: [] });
+  assert.match(html, /Distribución por módulo/);
+  assert.match(html, /home-banking/);
 });
