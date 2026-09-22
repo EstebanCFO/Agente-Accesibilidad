@@ -68,3 +68,21 @@ test('scanBatch clasifica un timeout como error de tipo "timeout" sin frenar el 
 test('scanBatch requiere urlList no vacío', async () => {
   await assert.rejects(() => scanBatch({ urlList: [] }), /requiere "urlList"/);
 });
+
+test('scanUrl con captureScreenshot:true agrega una screenshot base64 no vacía', async () => {
+  const result = await scanUrl({ url: 'https://example.com', captureScreenshot: true });
+  assert.equal(typeof result.screenshot, 'string');
+  assert.ok(result.screenshot.length > 100);
+});
+
+test('scanUrl con captureHtml:true agrega el HTML completo de la página', async () => {
+  const result = await scanUrl({ url: 'https://example.com', captureHtml: true });
+  assert.match(result.html, /<html/i);
+  assert.match(result.html, /Example Domain/);
+});
+
+test('scanUrl sin capture flags no agrega screenshot ni html', async () => {
+  const result = await scanUrl({ url: 'https://example.com' });
+  assert.equal(result.screenshot, undefined);
+  assert.equal(result.html, undefined);
+});

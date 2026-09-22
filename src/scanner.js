@@ -39,8 +39,8 @@ async function createContext(browser, auth, viewport) {
   return context;
 }
 
-function toAxeResult(url, results) {
-  return {
+function toAxeResult(url, results, extras = {}) {
+  const base = {
     url,
     scanned_at: new Date().toISOString(),
     violation_count: results.violations.length,
@@ -60,6 +60,9 @@ function toAxeResult(url, results) {
       }))
     }))
   };
+  if (extras.screenshot) base.screenshot = extras.screenshot;
+  if (extras.html) base.html = extras.html;
+  return base;
 }
 
 /**
@@ -67,7 +70,7 @@ function toAxeResult(url, results) {
  * o de un solo uso en scanUrl). Cada llamada abre y cierra su propio context, para que auth/cookies
  * no se mezclen entre URLs concurrentes.
  */
-async function scanOne(browser, { url, wcagTags, auth, viewport, timeout, waitFor }) {
+async function scanOne(browser, { url, wcagTags, auth, viewport, timeout, waitFor, captureScreenshot, captureHtml }) {
   const context = await createContext(browser, auth, viewport);
   try {
     const page = await context.newPage();
@@ -91,18 +94,27 @@ async function scanOne(browser, { url, wcagTags, auth, viewport, timeout, waitFo
     }
     const results = await axeBuilder.analyze();
 
-    return toAxeResult(url, results);
+    const extras = {};
+    if (captureScreenshot) {
+      const buffer = await page.screenshot({ fullPage: true });
+      extras.screenshot = buffer.toString('base64');
+    }
+    if (captureHtml) {
+      extras.html = await page.content();
+    }
+
+    return toAxeResult(url, results, extras);
   } finally {
     await context.close();
   }
 }
 
-export async function scanUrl({ url, wcagTags, auth, viewport, timeout, waitFor }) {
+export async function scanUrl({ url, wcagTags, auth, viewport, timeout, waitFor, captureScreenshot, captureHtml }) {
   if (!url) throw new Error('scanUrl requiere "url"');
 
   const browser = await chromium.launch();
   try {
-    return await scanOne(browser, { url, wcagTags, auth, viewport, timeout, waitFor });
+    return await scanOne(browser, { url, wcagTags, auth, viewport, timeout, waitFor, captureScreenshot, captureHtml });
   } finally {
     await browser.close();
   }
@@ -123,7 +135,7 @@ function classifyError(error) {
   return { type: 'unknown', message: error.message };
 }
 
-export async function scanBatch({ urlList, wcagTags, auth, workers = 3, viewport, timeout, waitFor }) {
+export async function scanBatch({ urlList, wcagTags, auth, workers = 3, viewport, timeout, waitFor, captureScreenshot, captureHtml }) {
   if (!Array.isArray(urlList) || urlList.length === 0) {
     throw new Error('scanBatch requiere "urlList" no vacío');
   }
@@ -139,7 +151,7 @@ export async function scanBatch({ urlList, wcagTags, auth, workers = 3, viewport
         const index = nextIndex++;
         const url = urlList[index];
         try {
-          results[index] = await scanOne(browser, { url, wcagTags, auth, viewport, timeout, waitFor });
+          results[index] = await scanOne(browser, { url, wcagTags, auth, viewport, timeout, waitFor, captureScreenshot, captureHtml });
         } catch (error) {
           results[index] = { url, error: classifyError(error) };
         }
