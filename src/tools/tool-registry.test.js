@@ -9,17 +9,17 @@ import { JobStore } from '../job-store.js';
 const CORE_TOOL_NAMES = [
   'validate_config', 'crawl_site', 'validate_url_list', 'scan_url', 'scan_batch',
   'classify_findings', 'calculate_score', 'generate_deliverable', 'consolidate_jobs',
-  'request_clarification', 'log_progress'
+  'request_clarification', 'log_progress', 'visual_audit', 'ux_compliance_review'
 ];
 
-async function setup({ outputPath } = {}) {
+async function setup({ outputPath, anthropicClient } = {}) {
   const jobStore = new JobStore();
   jobStore.createJob({
     job_id: 'job-1',
     target: { channel: 'home_banking', mode: 'url_list', urls: ['https://x.test'] },
     output: { path: outputPath ?? await mkdtemp(path.join(tmpdir(), 'f1-reports-')) }
   });
-  const registry = createToolRegistry({ jobStore });
+  const registry = createToolRegistry({ jobStore, anthropicClient });
   return { jobStore, registry };
 }
 
@@ -157,4 +157,36 @@ test('consolidate_jobs requiere job_ids no vacío', async () => {
 test('execute lanza error para un nombre de tool desconocido', async () => {
   const { registry } = await setup();
   await assert.rejects(() => registry.execute('tool_inexistente', {}, 'job-1'), /Unknown tool/);
+});
+
+function fakeAnthropicClient(toolInput) {
+  return {
+    messages: {
+      create: async () => ({ content: [{ type: 'tool_use', name: 'report_findings', input: toolInput }] })
+    }
+  };
+}
+
+test('visual_audit delega en runVisualAudit y devuelve visual_findings normalizados', async () => {
+  const anthropicClient = fakeAnthropicClient({
+    findings: [{ wcag_criterion: '1.4.3', severity: 'serious', failure_summary: 'Contraste bajo', remediation_hint: 'Subir contraste' }]
+  });
+  const { registry } = await setup({ anthropicClient });
+
+  const result = await registry.execute('visual_audit', { url: 'https://a.test', screenshot: 'ZmFrZQ==' }, 'job-1');
+
+  assert.equal(result.visual_findings.length, 1);
+  assert.equal(result.visual_findings[0].source, 'visual_audit');
+});
+
+test('ux_compliance_review delega en runUxComplianceReview y devuelve ux_findings normalizados', async () => {
+  const anthropicClient = fakeAnthropicClient({
+    findings: [{ wcag_criterion: '3.3.1', severity: 'moderate', failure_summary: 'Error solo por color', remediation_hint: 'Agregar texto' }]
+  });
+  const { registry } = await setup({ anthropicClient });
+
+  const result = await registry.execute('ux_compliance_review', { url: 'https://a.test', html: '<form></form>' }, 'job-1');
+
+  assert.equal(result.ux_findings.length, 1);
+  assert.equal(result.ux_findings[0].source, 'ux_review');
 });
