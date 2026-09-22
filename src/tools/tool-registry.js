@@ -68,6 +68,24 @@ async function persistCaptures(result, jobStore, jobId) {
   return output;
 }
 
+/**
+ * screenshot_path/html_path llegan como argumento de tool_use del modelo - si el modelo fuera
+ * manipulado (mismo threat model que la protección contra prompt injection en los prompts de
+ * visual-audit.js/ux-compliance-review.js), un path arbitrario podría hacer leer cualquier
+ * archivo del filesystem. Se valida que el path resuelto caiga dentro del directorio de
+ * capturas del propio job antes de tocar el filesystem - no se confía en sanitizar el string.
+ */
+function resolveCapturePath(rawPath, jobStore, jobId) {
+  if (!rawPath) return undefined;
+  const job = jobStore.getJob(jobId);
+  const capturesDir = path.resolve(job.config.output?.path ?? './reports', jobId, 'captures');
+  const resolved = path.resolve(rawPath);
+  if (resolved !== capturesDir && !resolved.startsWith(capturesDir + path.sep)) {
+    throw new Error(`screenshot_path/html_path debe estar dentro del directorio de capturas del job (${capturesDir}), recibido: ${rawPath}`);
+  }
+  return resolved;
+}
+
 const TOOL_SCHEMAS = [
   { name: 'validate_config', description: 'Verifica que la config del job sea completa y coherente', input_schema: { type: 'object', properties: { config: { type: 'object', description: 'Config JSON completa a validar' } }, required: ['config'] } },
   { name: 'crawl_site', description: 'Descubre todas las URLs del canal desde una raíz', input_schema: { type: 'object', properties: { root_url: { type: 'string' }, options: { type: 'object' } }, required: ['root_url'] } },
@@ -143,13 +161,16 @@ export function createToolRegistry({ jobStore, anthropicClient }) {
 
       return consolidated;
     },
-    visual_audit: async (input) => {
-      const screenshot = input.screenshot ?? (input.screenshot_path ? (await readFile(input.screenshot_path)).toString('base64') : undefined);
+    visual_audit: async (input, jobId) => {
+      const screenshotPath = resolveCapturePath(input.screenshot_path, jobStore, jobId);
+      const screenshot = input.screenshot ?? (screenshotPath ? (await readFile(screenshotPath)).toString('base64') : undefined);
       return runVisualAudit({ url: input.url, screenshot }, { anthropicClient, includeExtended: input.include_extended ?? false });
     },
-    ux_compliance_review: async (input) => {
-      const html = input.html ?? (input.html_path ? await readFile(input.html_path, 'utf8') : undefined);
-      const screenshot = input.screenshot ?? (input.screenshot_path ? (await readFile(input.screenshot_path)).toString('base64') : undefined);
+    ux_compliance_review: async (input, jobId) => {
+      const htmlPath = resolveCapturePath(input.html_path, jobStore, jobId);
+      const screenshotPath = resolveCapturePath(input.screenshot_path, jobStore, jobId);
+      const html = input.html ?? (htmlPath ? await readFile(htmlPath, 'utf8') : undefined);
+      const screenshot = input.screenshot ?? (screenshotPath ? (await readFile(screenshotPath)).toString('base64') : undefined);
       return runUxComplianceReview({ url: input.url, html, screenshot }, { anthropicClient, includeExtended: input.include_extended ?? false });
     }
   };

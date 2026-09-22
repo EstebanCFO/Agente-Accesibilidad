@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, mkdtemp, writeFile } from 'node:fs/promises';
+import { readFile, mkdtemp, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createToolRegistry } from './tool-registry.js';
@@ -13,14 +13,15 @@ const CORE_TOOL_NAMES = [
 ];
 
 async function setup({ outputPath, anthropicClient } = {}) {
+  const resolvedOutputPath = outputPath ?? await mkdtemp(path.join(tmpdir(), 'f1-reports-'));
   const jobStore = new JobStore();
   jobStore.createJob({
     job_id: 'job-1',
     target: { channel: 'home_banking', mode: 'url_list', urls: ['https://x.test'] },
-    output: { path: outputPath ?? await mkdtemp(path.join(tmpdir(), 'f1-reports-')) }
+    output: { path: resolvedOutputPath }
   });
   const registry = createToolRegistry({ jobStore, anthropicClient });
-  return { jobStore, registry };
+  return { jobStore, registry, outputPath: resolvedOutputPath };
 }
 
 test('expone un schema por cada tool del Tool Set (SPEC §6.1)', async () => {
@@ -192,10 +193,6 @@ test('ux_compliance_review delega en runUxComplianceReview y devuelve ux_finding
 });
 
 test('visual_audit lee screenshot_path del disco y lo manda al cliente como base64', async () => {
-  const tmpFile = path.join(await mkdtemp(path.join(tmpdir(), 'f1-capture-')), 'shot.png');
-  const fakeBytes = Buffer.from('contenido-de-prueba-no-es-un-png-real');
-  await writeFile(tmpFile, fakeBytes);
-
   let capturedParams;
   const anthropicClient = {
     messages: {
@@ -205,10 +202,28 @@ test('visual_audit lee screenshot_path del disco y lo manda al cliente como base
       }
     }
   };
-  const { registry } = await setup({ anthropicClient });
+  const { registry, outputPath } = await setup({ anthropicClient });
+
+  const capturesDir = path.join(outputPath, 'job-1', 'captures');
+  await mkdir(capturesDir, { recursive: true });
+  const tmpFile = path.join(capturesDir, 'shot.png');
+  const fakeBytes = Buffer.from('contenido-de-prueba-no-es-un-png-real');
+  await writeFile(tmpFile, fakeBytes);
 
   await registry.execute('visual_audit', { url: 'https://a.test', screenshot_path: tmpFile }, 'job-1');
 
   const imageBlock = capturedParams.messages[0].content.find((b) => b.type === 'image');
   assert.equal(imageBlock.source.data, fakeBytes.toString('base64'));
+});
+
+test('visual_audit rechaza un screenshot_path fuera del directorio de capturas del job', async () => {
+  const { registry } = await setup();
+  const outsideDir = await mkdtemp(path.join(tmpdir(), 'f1-outside-'));
+  const outsidePath = path.join(outsideDir, 'secret.png');
+  await writeFile(outsidePath, Buffer.from('no-deberia-leerse-nunca'));
+
+  await assert.rejects(
+    () => registry.execute('visual_audit', { url: 'https://a.test', screenshot_path: outsidePath }, 'job-1'),
+    /directorio de capturas/
+  );
 });
