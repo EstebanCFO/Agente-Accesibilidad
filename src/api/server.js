@@ -19,8 +19,8 @@ async function bootstrap() {
   const { AgentLoop } = await import('../agent-loop.js');
 
   const jobStore = new JobStore();
-  const toolRegistry = createToolRegistry({ jobStore });
   const anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const toolRegistry = createToolRegistry({ jobStore, anthropicClient });
 
   const app = createApp({
     jobStore,
