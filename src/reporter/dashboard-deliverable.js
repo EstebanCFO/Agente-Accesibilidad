@@ -85,6 +85,21 @@ function conformanceBadgeHtml(conformant) {
   return `<span class="badge" style="color:${color}"><span aria-hidden="true">${icon}</span> ${label}</span>`;
 }
 
+function visualUxSectionHtml(findings) {
+  const visualCount = findings.filter((f) => f.source === 'visual_audit').length;
+  const uxCount = findings.filter((f) => f.source === 'ux_review').length;
+  if (visualCount === 0 && uxCount === 0) {
+    return '<p class="empty">No disponible — los skills externos (visual_audit / ux_compliance_review) no se activaron en este job.</p>';
+  }
+  return `<table>
+    <thead><tr><th>Fuente</th><th>Hallazgos</th></tr></thead>
+    <tbody>
+      <tr><td>Visual (rams)</td><td>${visualCount}</td></tr>
+      <tr><td>UX / navegación</td><td>${uxCount}</td></tr>
+    </tbody>
+  </table>`;
+}
+
 function extendedBlockHtml(extended22) {
   if (!extended22) return '';
   return `<section class="card">
@@ -216,7 +231,7 @@ export function buildDashboardHtml({ jobId, channel, scores, findings }) {
 
     <section class="card">
       <h2>Hallazgos visuales / UX</h2>
-      <p class="empty">No disponible — los skills externos (visual_audit / ux_compliance_review) todavía no están integrados en el agente.</p>
+      ${visualUxSectionHtml(findings)}
     </section>
 
     ${extendedBlockHtml(extended22)}

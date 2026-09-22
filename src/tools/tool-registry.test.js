@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, mkdtemp } from 'node:fs/promises';
+import { readFile, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createToolRegistry } from './tool-registry.js';
@@ -189,4 +189,26 @@ test('ux_compliance_review delega en runUxComplianceReview y devuelve ux_finding
 
   assert.equal(result.ux_findings.length, 1);
   assert.equal(result.ux_findings[0].source, 'ux_review');
+});
+
+test('visual_audit lee screenshot_path del disco y lo manda al cliente como base64', async () => {
+  const tmpFile = path.join(await mkdtemp(path.join(tmpdir(), 'f1-capture-')), 'shot.png');
+  const fakeBytes = Buffer.from('contenido-de-prueba-no-es-un-png-real');
+  await writeFile(tmpFile, fakeBytes);
+
+  let capturedParams;
+  const anthropicClient = {
+    messages: {
+      create: async (params) => {
+        capturedParams = params;
+        return { content: [{ type: 'tool_use', name: 'report_findings', input: { findings: [] } }] };
+      }
+    }
+  };
+  const { registry } = await setup({ anthropicClient });
+
+  await registry.execute('visual_audit', { url: 'https://a.test', screenshot_path: tmpFile }, 'job-1');
+
+  const imageBlock = capturedParams.messages[0].content.find((b) => b.type === 'image');
+  assert.equal(imageBlock.source.data, fakeBytes.toString('base64'));
 });

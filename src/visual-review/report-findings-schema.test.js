@@ -8,10 +8,16 @@ test('REPORT_FINDINGS_TOOL tiene el nombre y schema esperados por tool_choice', 
   assert.ok(REPORT_FINDINGS_TOOL.input_schema.properties.findings);
 });
 
-test('criteriaListText incluye criterios ONTI y extendidos con su descripción', () => {
+test('criteriaListText incluye solo criterios ONTI por default (sin includeExtended)', () => {
   const text = criteriaListText();
   assert.match(text, /1\.1\.1/);
   assert.match(text, /Contenido no textual/);
+  assert.doesNotMatch(text, /extended_22/);
+});
+
+test('criteriaListText incluye también los extendidos cuando includeExtended:true', () => {
+  const text = criteriaListText(true);
+  assert.match(text, /1\.1\.1/);
   assert.match(text, /extended_22/);
 });
 
@@ -43,4 +49,17 @@ test('normalizeReportedFindings cae a severity "moderate" si el modelo devuelve 
   const raw = [{ wcag_criterion: '1.1.1', severity: 'catastrófico', failure_summary: 'x', remediation_hint: 'y' }];
   const findings = normalizeReportedFindings(raw, { url: 'https://a.test', source: 'visual_audit' });
   assert.equal(findings[0].severity, 'moderate');
+});
+
+test('normalizeReportedFindings descarta un criterio extended_22 si includeExtended no está en true (gate de la config, D7)', () => {
+  const raw = [{ wcag_criterion: '2.5.8', severity: 'moderate', failure_summary: 'Target chico', remediation_hint: 'Agrandar target' }];
+  const findings = normalizeReportedFindings(raw, { url: 'https://a.test', source: 'visual_audit' });
+  assert.deepEqual(findings, []);
+});
+
+test('normalizeReportedFindings acepta un criterio extended_22 con includeExtended:true', () => {
+  const raw = [{ wcag_criterion: '2.5.8', severity: 'moderate', failure_summary: 'Target chico', remediation_hint: 'Agrandar target' }];
+  const findings = normalizeReportedFindings(raw, { url: 'https://a.test', source: 'visual_audit', includeExtended: true });
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].in_scope, 'extended_22');
 });

@@ -69,3 +69,13 @@ test('buildDashboardHtml incluye la distribución por módulo', () => {
   assert.match(html, /Distribución por módulo/);
   assert.match(html, /home-banking/);
 });
+
+test('buildDashboardHtml muestra conteos reales cuando hay findings de visual_audit/ux_review', () => {
+  const findings = [
+    { wcag_criterion: '1.4.3', wcag_description: 'Contraste', in_scope: 'onti', severity: 'serious', occurrences: 1, source: 'visual_audit' },
+    { wcag_criterion: '3.3.1', wcag_description: 'Identificación de errores', in_scope: 'onti', severity: 'moderate', occurrences: 1, source: 'ux_review' }
+  ];
+  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: baseScores(), findings });
+  assert.doesNotMatch(html, /No disponible — los skills externos/);
+  assert.match(html, /Visual \(rams\)/);
+});

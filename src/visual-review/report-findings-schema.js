@@ -35,18 +35,21 @@ export const REPORT_FINDINGS_TOOL = {
  * Texto con los 38 criterios ONTI + 18 extendidos para que el modelo elija el más cercano
  * (o ninguno) al reportar un hallazgo — mismo marco normativo que ya usa el resto del pipeline.
  */
-export function criteriaListText() {
+export function criteriaListText(includeExtended = false) {
   const onti = ontiCriteria.map((c) => `${c.wcag_criterion} (${c.level}, onti): ${c.description}`);
+  if (!includeExtended) return onti.join('\n');
   const extended = extendedCriteria.map((c) => `${c.wcag_criterion} (${c.level}, extended_22): ${c.description}`);
   return [...onti, ...extended].join('\n');
 }
 
-function resolveCriterion(wcagCriterion) {
+function resolveCriterion(wcagCriterion, { includeExtended }) {
   if (!wcagCriterion) return null;
   const onti = lookupOntiCriterion(wcagCriterion);
   if (onti) return { ...onti, in_scope: 'onti' };
-  const extended = lookupExtendedCriterion(wcagCriterion);
-  if (extended) return { ...extended, in_scope: 'extended_22' };
+  if (includeExtended) {
+    const extended = lookupExtendedCriterion(wcagCriterion);
+    if (extended) return { ...extended, in_scope: 'extended_22' };
+  }
   return null;
 }
 
@@ -65,10 +68,10 @@ function slugify(text) {
  * criterio D7 que ya usa classify-findings.js para axe-core - y defiende contra un `severity`
  * fuera de la enum en vez de dejarlo pasar tal cual (el modelo puede alucinar un valor).
  */
-export function normalizeReportedFindings(rawFindings, { url, source }) {
+export function normalizeReportedFindings(rawFindings, { url, source, includeExtended = false }) {
   const findings = [];
   for (const raw of rawFindings || []) {
-    const criterion = resolveCriterion(raw.wcag_criterion);
+    const criterion = resolveCriterion(raw.wcag_criterion, { includeExtended });
     if (!criterion) continue;
 
     const severity = VALID_SEVERITIES.includes(raw.severity) ? raw.severity : 'moderate';
