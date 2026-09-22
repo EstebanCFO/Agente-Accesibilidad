@@ -83,11 +83,23 @@ test('se detiene con status failed y stop_reason max_iterations_reached al agota
 test('propaga un error de tool como tool_result con is_error sin frenar el loop', async () => {
   const { jobStore, toolRegistry } = setup();
   const anthropicClient = new FakeAnthropicClient([
-    { content: [{ type: 'tool_use', id: 'call_1', name: 'crawl_site', input: { root_url: 'https://x.test' } }] },
-    { content: [{ type: 'text', text: 'Entendido, sigo sin crawler.' }] }
+    { content: [{ type: 'tool_use', id: 'call_1', name: 'scan_batch', input: { url_list: [] } }] },
+    { content: [{ type: 'text', text: 'Entendido, url_list vacío.' }] }
   ]);
   const loop = new AgentLoop({ anthropicClient, toolRegistry, jobStore, maxIterations: 5 });
   const job = await loop.run('job-1');
   assert.equal(job.status, 'completed');
   assert.equal(anthropicClient.calls, 2);
+});
+
+test('se detiene con status cancelled sin sobrescribirlo cuando el job fue cancelado externamente', async () => {
+  const { jobStore, toolRegistry } = setup();
+  jobStore.updateJob('job-1', { status: 'cancelled' });
+  const anthropicClient = new FakeAnthropicClient([
+    { content: [{ type: 'text', text: 'no debería llegar a evaluarse' }] }
+  ]);
+  const loop = new AgentLoop({ anthropicClient, toolRegistry, jobStore, maxIterations: 5 });
+  const job = await loop.run('job-1');
+  assert.equal(job.status, 'cancelled');
+  assert.equal(anthropicClient.calls, 0);
 });

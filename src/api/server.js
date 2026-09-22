@@ -3,10 +3,10 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { createRouter } from './routes.js';
 
-export function createApp({ jobStore, agentLoopFactory }) {
+export function createApp({ jobStore, agentLoopFactory, toolRegistry }) {
   const app = express();
   app.use(express.json());
-  app.use('/api', createRouter({ jobStore, agentLoopFactory }));
+  app.use('/api', createRouter({ jobStore, agentLoopFactory, toolRegistry }));
   return app;
 }
 
@@ -24,6 +24,7 @@ async function bootstrap() {
 
   const app = createApp({
     jobStore,
+    toolRegistry,
     agentLoopFactory: (config) => new AgentLoop({
       anthropicClient,
       toolRegistry,

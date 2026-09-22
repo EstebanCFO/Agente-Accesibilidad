@@ -22,12 +22,19 @@ export class AgentLoop {
     if (!initialJob) {
       throw new Error(`Job no encontrado: ${jobId}`);
     }
-    this.jobStore.updateJob(jobId, { status: 'running' });
+    // No pisar un job ya cancelado (ej: DELETE llegó antes de que este run() alcance a ejecutarse,
+    // ya que POST /jobs dispara run() sin esperarlo).
+    if (initialJob.status !== 'cancelled') {
+      this.jobStore.updateJob(jobId, { status: 'running' });
+    }
 
     const messages = [{ role: 'user', content: buildInitialPrompt(initialJob.config) }];
 
     while (true) {
       const job = this.jobStore.getJob(jobId);
+      if (job.status === 'cancelled') {
+        break;
+      }
       if (job.iterations >= this.maxIterations) {
         this.jobStore.updateJob(jobId, { status: 'failed', stop_reason: 'max_iterations_reached' });
         break;
@@ -47,7 +54,7 @@ export class AgentLoop {
 
       if (toolUseBlocks.length === 0) {
         const finalJob = this.jobStore.getJob(jobId);
-        if (finalJob.status !== 'blocked') {
+        if (finalJob.status !== 'blocked' && finalJob.status !== 'cancelled') {
           this.jobStore.updateJob(jobId, { status: 'completed' });
         }
         break;
@@ -64,7 +71,8 @@ export class AgentLoop {
       }
       messages.push({ role: 'user', content: toolResults });
 
-      if (this.jobStore.getJob(jobId).status === 'blocked') {
+      const statusAfterTools = this.jobStore.getJob(jobId).status;
+      if (statusAfterTools === 'blocked' || statusAfterTools === 'cancelled') {
         break;
       }
     }
