@@ -5,14 +5,26 @@ import { readFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline/promises';
 import Anthropic from '@anthropic-ai/sdk';
 import { chromium } from 'playwright';
+import { log as crawleeLog, LogLevel } from 'crawlee';
 import { scanUrl } from '../src/scanner.js';
+import { crawlSite } from '../src/discovery/crawl-site.js';
+
+// crawlee imprime sus propios logs INFO ("Starting the crawler", stats de requests) - se ven
+// técnicos para una demo de audiencia C-level. No se toca crawl-site.js (código de producción,
+// ese logging es útil ahí); acá es solo cosmética de presentación.
+crawleeLog.setLevel(LogLevel.OFF);
 import { classifyFindings } from '../src/classification/classify-findings.js';
 import { calculateScore } from '../src/classification/calculate-score.js';
 import { runVisualAudit } from '../src/visual-review/visual-audit.js';
 import { runUxComplianceReview } from '../src/visual-review/ux-compliance-review.js';
 import { generateDeliverable } from '../src/reporter/generate-deliverable.js';
 import { resolveTargetUrl } from './demo-site-selection.js';
+import { resolveAdditionalPageCount } from './demo-page-selection.js';
 import { buildHighlightTargets, buildBadgeText } from './demo-highlight.js';
+
+// Con 10 páginas el crawl real tardó ~29s en pruebas en vivo (sin ningún aviso, se puede
+// confundir con que la demo se colgó) - se recorta a 6 para que el paso 1 quede en ~15-20s.
+const MAX_PAGES_TO_DISCOVER = 6;
 
 /**
  * Demo guionada para audiencia C-level: pasos fijos y controlados por el presentador (no el
@@ -93,51 +105,76 @@ async function main() {
   const page = await context.newPage();
 
   header(1, 'Descubrir');
-  console.log(`Navegando a: ${targetUrl}`);
-  await page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
-  console.log('Página cargada. (En una corrida real, acá el agente recorrería todo el sitio buscando cada pantalla a auditar.)');
-  await pause('Escanear la página con el motor de accesibilidad');
+  console.log(`Recorriendo el sitio desde: ${targetUrl}`);
+  console.log('(Esto puede tardar unos 25-30 segundos reales - el agente está navegando el sitio de verdad, no es un valor simulado.)');
+  let discoveredUrls = [];
+  try {
+    discoveredUrls = await crawlSite(targetUrl, { maxUrls: MAX_PAGES_TO_DISCOVER });
+  } catch (error) {
+    console.log(`No se pudo recorrer el sitio automáticamente (${error.message}) - se sigue solo con la página principal.`);
+  }
+  const subpages = discoveredUrls.filter((url) => url !== targetUrl);
+
+  let pagesToAudit = [targetUrl];
+  if (subpages.length > 0) {
+    console.log(`Se encontraron ${subpages.length} subpágina(s) además de la principal:`);
+    subpages.forEach((url, i) => console.log(`  ${i + 1}) ${url}`));
+    const answer = await rl.question(`\n¿Cuántas de estas querés auditar además de la principal? (0-${subpages.length}, Enter = 0): `);
+    const additionalCount = resolveAdditionalPageCount(answer, subpages.length);
+    pagesToAudit = [targetUrl, ...subpages.slice(0, additionalCount)];
+  } else {
+    console.log('No se encontraron subpáginas adicionales (o el sitio no permitió recorrerlo) - se sigue solo con la página principal.');
+  }
+  console.log(`\nSe van a auditar ${pagesToAudit.length} página(s) en total.`);
+  await pause('Escanear cada página con el motor de accesibilidad');
 
   header(2, 'Escanear');
-  console.log('Corriendo el escaneo automático de accesibilidad...');
-  // waitFor:'load' en vez del default 'networkidle' - varios sitios reales (analytics, chat
-  // widgets, polling) nunca llegan a red inactiva y cuelgan el escaneo en una demo en vivo.
-  const axeResult = await scanUrl({ url: targetUrl, captureScreenshot: true, captureHtml: true, waitFor: 'load' });
-  console.log(`Escaneo terminado: ${axeResult.violation_count} problema(s) técnico(s) detectado(s), ${axeResult.pass_count} chequeo(s) aprobado(s).`);
-  await page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
-  await highlightOnPage(page, axeResult.violations);
-  console.log('Los problemas quedaron marcados directamente sobre la página (rojo = crítico, naranja = serio, amarillo = moderado).');
+  const axeResults = [];
+  for (const url of pagesToAudit) {
+    console.log(`\nEscaneando: ${url}`);
+    // waitFor:'load' en vez del default 'networkidle' - varios sitios reales (analytics, chat
+    // widgets, polling) nunca llegan a red inactiva y cuelgan el escaneo en una demo en vivo.
+    const axeResult = await scanUrl({ url, captureScreenshot: true, captureHtml: true, waitFor: 'load' });
+    console.log(`  ${axeResult.violation_count} problema(s) técnico(s) detectado(s), ${axeResult.pass_count} chequeo(s) aprobado(s).`);
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    await highlightOnPage(page, axeResult.violations);
+    await page.waitForTimeout(1200);
+    axeResults.push(axeResult);
+  }
+  console.log('\nLos problemas quedaron marcados directamente sobre cada página (rojo = crítico, naranja = serio, amarillo = moderado).');
   await pause('Clasificar los hallazgos contra la normativa argentina (ONTI/BCRA)');
 
   header(3, 'Clasificar contra ONTI/BCRA');
-  const { findings } = classifyFindings([axeResult]);
-  const scores = calculateScore(findings, { axeResults: [axeResult] });
-  console.log(`Criterios ONTI evaluados: ${scores.summary.onti_criteria_evaluated}. Conformes: ${scores.summary.onti_criteria_compliant}. Score: ${scores.summary.onti_compliance_percentage}%.`);
+  const { findings } = classifyFindings(axeResults);
+  const scores = calculateScore(findings, { axeResults });
+  console.log(`Páginas evaluadas: ${scores.summary.total_urls_evaluated}. Criterios ONTI evaluados: ${scores.summary.onti_criteria_evaluated}. Conformes: ${scores.summary.onti_criteria_compliant}. Score: ${scores.summary.onti_compliance_percentage}%.`);
   await pause('Revisión visual con inteligencia artificial (contraste, spacing, touch targets)');
 
   header(4, 'Revisión visual con IA');
-  console.log('Mandando la captura de pantalla a la IA con visión (esto puede tardar unos segundos)...');
-  const { visual_findings: visualFindings } = await runVisualAudit(
-    { url: targetUrl, screenshot: axeResult.screenshot },
-    { anthropicClient }
-  );
-  console.log(`La IA encontró ${visualFindings.length} hallazgo(s) visual(es) adicional(es) que el escaneo automático no puede ver por sí solo.`);
-  for (const f of visualFindings.slice(0, 3)) console.log(`  • [${f.severity}] ${f.failure_summary}`);
+  const visualFindings = [];
+  for (const axeResult of axeResults) {
+    console.log(`\nMandando la captura de ${axeResult.url} a la IA con visión (esto puede tardar unos segundos)...`);
+    const { visual_findings } = await runVisualAudit({ url: axeResult.url, screenshot: axeResult.screenshot }, { anthropicClient });
+    console.log(`  ${visual_findings.length} hallazgo(s) visual(es) adicional(es).`);
+    for (const f of visual_findings.slice(0, 3)) console.log(`    • [${f.severity}] ${f.failure_summary}`);
+    visualFindings.push(...visual_findings);
+  }
   await pause('Revisión de experiencia de usuario con IA');
 
   header(5, 'Revisión de UX con IA');
-  console.log('Mandando el HTML de la página a la IA...');
-  const { ux_findings: uxFindings } = await runUxComplianceReview(
-    { url: targetUrl, html: axeResult.html },
-    { anthropicClient }
-  );
-  console.log(`La IA encontró ${uxFindings.length} hallazgo(s) de experiencia de usuario adicional(es).`);
-  for (const f of uxFindings.slice(0, 3)) console.log(`  • [${f.severity}] ${f.failure_summary}`);
+  const uxFindings = [];
+  for (const axeResult of axeResults) {
+    console.log(`\nMandando el HTML de ${axeResult.url} a la IA...`);
+    const { ux_findings } = await runUxComplianceReview({ url: axeResult.url, html: axeResult.html }, { anthropicClient });
+    console.log(`  ${ux_findings.length} hallazgo(s) de experiencia de usuario adicional(es).`);
+    for (const f of ux_findings.slice(0, 3)) console.log(`    • [${f.severity}] ${f.failure_summary}`);
+    uxFindings.push(...ux_findings);
+  }
   await pause('Generar el dashboard ejecutivo final');
 
   header(6, 'Generar el dashboard ejecutivo');
   const allFindings = [...findings, ...visualFindings, ...uxFindings];
-  const finalScores = calculateScore(allFindings, { axeResults: [axeResult] });
+  const finalScores = calculateScore(allFindings, { axeResults });
   const [dashboardPath] = await generateDeliverable(
     'dashboard',
     { jobId, channel: 'demo', scores: finalScores, findings: allFindings },
