@@ -20,6 +20,7 @@ import { runUxComplianceReview } from '../src/visual-review/ux-compliance-review
 import { generateDeliverable } from '../src/reporter/generate-deliverable.js';
 import { resolveTargetUrl } from './demo-site-selection.js';
 import { resolveAdditionalPageCount } from './demo-page-selection.js';
+import { isLocalPath, listHtmlFiles, toFileUrl } from './demo-local-source.js';
 import { buildHighlightTargets, buildBadgeText } from './demo-highlight.js';
 
 // Con 10 páginas el crawl real tardó ~29s en pruebas en vivo (sin ningún aviso, se puede
@@ -88,13 +89,12 @@ async function main() {
 
   console.log('=== Demo: Agente F1 de Compliance de Accesibilidad ===');
   const choice = await rl.question(
-    '\n1) Sitio de demo (problemas reales, sin riesgo)\n2) Sitio del cliente (vas a pedir la URL)\n3) Otra URL\n\nElegí una opción: '
+    '\n1) Sitio de demo (problemas reales, sin riesgo)\n2) Sitio del cliente (vas a pedir la URL)\n3) Otra URL o una carpeta local con archivos .html\n\nElegí una opción: '
   );
-  let customUrl;
+  let customInput;
   if (['2', '3'].includes(choice.trim())) {
-    customUrl = await rl.question('Pegá la URL a auditar: ');
+    customInput = await rl.question('Pegá la URL o el path de una carpeta local: ');
   }
-  const targetUrl = resolveTargetUrl(choice, customUrl);
 
   const anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const jobId = `demo-${Date.now()}`;
@@ -105,26 +105,47 @@ async function main() {
   const page = await context.newPage();
 
   header(1, 'Descubrir');
-  console.log(`Recorriendo el sitio desde: ${targetUrl}`);
-  console.log('(Esto puede tardar unos 25-30 segundos reales - el agente está navegando el sitio de verdad, no es un valor simulado.)');
-  let discoveredUrls = [];
-  try {
-    discoveredUrls = await crawlSite(targetUrl, { maxUrls: MAX_PAGES_TO_DISCOVER });
-  } catch (error) {
-    console.log(`No se pudo recorrer el sitio automáticamente (${error.message}) - se sigue solo con la página principal.`);
-  }
-  const subpages = discoveredUrls.filter((url) => url !== targetUrl);
+  let pagesToAudit;
 
-  let pagesToAudit = [targetUrl];
-  if (subpages.length > 0) {
-    console.log(`Se encontraron ${subpages.length} subpágina(s) además de la principal:`);
-    subpages.forEach((url, i) => console.log(`  ${i + 1}) ${url}`));
-    const answer = await rl.question(`\n¿Cuántas de estas querés auditar además de la principal? (0-${subpages.length}, Enter = 0): `);
-    const additionalCount = resolveAdditionalPageCount(answer, subpages.length);
-    pagesToAudit = [targetUrl, ...subpages.slice(0, additionalCount)];
+  if (choice.trim() === '3' && isLocalPath(customInput)) {
+    console.log(`Buscando archivos .html en: ${customInput}`);
+    const htmlFiles = await listHtmlFiles(customInput);
+    console.log(`Se encontraron ${htmlFiles.length} archivo(s) .html:`);
+    htmlFiles.forEach((f, i) => console.log(`  ${i + 1}) ${f}`));
+
+    const mainUrl = toFileUrl(htmlFiles[0]);
+    const rest = htmlFiles.slice(1).map(toFileUrl);
+    if (rest.length > 0) {
+      const answer = await rl.question(`\n¿Cuántos de estos querés auditar además del primero? (0-${rest.length}, Enter = 0): `);
+      const additionalCount = resolveAdditionalPageCount(answer, rest.length);
+      pagesToAudit = [mainUrl, ...rest.slice(0, additionalCount)];
+    } else {
+      pagesToAudit = [mainUrl];
+    }
   } else {
-    console.log('No se encontraron subpáginas adicionales (o el sitio no permitió recorrerlo) - se sigue solo con la página principal.');
+    const targetUrl = resolveTargetUrl(choice, customInput);
+    console.log(`Recorriendo el sitio desde: ${targetUrl}`);
+    console.log('(Esto puede tardar unos 25-30 segundos reales - el agente está navegando el sitio de verdad, no es un valor simulado.)');
+    let discoveredUrls = [];
+    try {
+      discoveredUrls = await crawlSite(targetUrl, { maxUrls: MAX_PAGES_TO_DISCOVER });
+    } catch (error) {
+      console.log(`No se pudo recorrer el sitio automáticamente (${error.message}) - se sigue solo con la página principal.`);
+    }
+    const subpages = discoveredUrls.filter((url) => url !== targetUrl);
+
+    pagesToAudit = [targetUrl];
+    if (subpages.length > 0) {
+      console.log(`Se encontraron ${subpages.length} subpágina(s) además de la principal:`);
+      subpages.forEach((url, i) => console.log(`  ${i + 1}) ${url}`));
+      const answer = await rl.question(`\n¿Cuántas de estas querés auditar además de la principal? (0-${subpages.length}, Enter = 0): `);
+      const additionalCount = resolveAdditionalPageCount(answer, subpages.length);
+      pagesToAudit = [targetUrl, ...subpages.slice(0, additionalCount)];
+    } else {
+      console.log('No se encontraron subpáginas adicionales (o el sitio no permitió recorrerlo) - se sigue solo con la página principal.');
+    }
   }
+
   console.log(`\nSe van a auditar ${pagesToAudit.length} página(s) en total.`);
   await pause('Escanear cada página con el motor de accesibilidad');
 
