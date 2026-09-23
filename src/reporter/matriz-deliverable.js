@@ -40,7 +40,7 @@ export function buildConformityMatrix({ findings, urls, includeExtended = false,
 
   for (const finding of findings) {
     if (finding.in_scope !== 'onti' && !(includeExtended && finding.in_scope === 'extended_22')) continue;
-    const target = (finding.review_status ?? 'confirmado') === 'confirmado' ? confirmed : review;
+    const target = finding.review_status === 'requiere_revision' ? review : confirmed;
     for (const url of finding.affected_urls || []) {
       target.add(`${url}::${finding.wcag_criterion}`);
     }
@@ -81,7 +81,7 @@ export function buildModuleConformityMatrix({ findings, urls, includeExtended = 
 
   for (const finding of findings) {
     if (finding.in_scope !== 'onti' && !(includeExtended && finding.in_scope === 'extended_22')) continue;
-    const target = (finding.review_status ?? 'confirmado') === 'confirmado' ? confirmed : review;
+    const target = finding.review_status === 'requiere_revision' ? review : confirmed;
     for (const url of finding.affected_urls || []) {
       const module = urlToModule.get(url) ?? classifyModule(url);
       target.add(`${module}::${finding.wcag_criterion}`);

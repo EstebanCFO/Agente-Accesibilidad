@@ -15,6 +15,7 @@ const FINDING_COLUMNS = [
   { header: 'Es criterio ONTI', key: 'onti_criterion', width: 16 },
   { header: 'Alcance', key: 'in_scope', width: 14 },
   { header: 'Severidad', key: 'severity', width: 12 },
+  { header: 'Estado de revisión', key: 'review_status', width: 18 },
   { header: 'Rule ID (axe)', key: 'rule_id', width: 24 },
   { header: 'URLs afectadas', key: 'affected_urls', width: 50 },
   { header: 'Ocurrencias', key: 'occurrences', width: 12 },

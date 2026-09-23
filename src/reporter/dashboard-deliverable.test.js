@@ -7,7 +7,7 @@ function baseScores(overrides = {}) {
     summary: {
       total_urls_evaluated: 1, onti_criteria_evaluated: 38, onti_criteria_compliant: 38,
       onti_compliance_percentage: 100, onti_conformance: true, conformance_threshold: 30,
-      score_level_a: 100, score_level_aa: 100
+      score_level_a: 100, score_level_a_evaluated: 25, score_level_aa: 100, score_level_aa_evaluated: 13
     },
     extended_22: null,
     by_url: [{ url: 'https://a.test/home-banking/pago', module: 'home-banking', onti_compliance_percentage: 100, violations: 0, incomplete: 0 }],
@@ -26,6 +26,13 @@ test('buildDashboardHtml muestra NO CONFORME cuando onti_conformance=false', () 
   const scores = baseScores({ summary: { ...baseScores().summary, onti_conformance: false, onti_criteria_compliant: 20 } });
   const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores, findings: [] });
   assert.match(html, /NO CONFORME/);
+});
+
+test('buildDashboardHtml muestra el umbral efectivo y la cantidad de criterios N/A cuando hay alguno', () => {
+  const scores = baseScores({ summary: { ...baseScores().summary, onti_criteria_na: 2, effective_conformance_threshold: 28, onti_criteria_evaluated: 36 } });
+  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores, findings: [] });
+  assert.match(html, /ajustado a ≥ 28\/36/);
+  assert.match(html, /2 criterio\(s\) no aplican/);
 });
 
 test('buildDashboardHtml omite el bloque de capa extendida cuando extended_22 es null', () => {

@@ -58,7 +58,9 @@ const BUILDERS = {
   matriz: async (data, outputDir) => {
     const includeExtended = data.includeExtended ?? false;
     const urls = data.urls || [];
-    const naCriteria = computeNaCriteria(data.axeResults || [], { includeExtended: false });
+    const rawNaCriteria = computeNaCriteria(data.axe_results ?? data.axeResults ?? [], { includeExtended: false });
+    const findingCriteria = new Set((data.findings || []).filter((f) => f.in_scope === 'onti').map((f) => f.wcag_criterion));
+    const naCriteria = rawNaCriteria.filter((c) => !findingCriteria.has(c));
     const conformity = buildConformityMatrix({ findings: data.findings, urls, includeExtended, naCriteria });
     const moduleConformity = buildModuleConformityMatrix({ findings: data.findings, urls, includeExtended, naCriteria });
     const severityImpactGrid = buildSeverityImpactGrid(data.findings);

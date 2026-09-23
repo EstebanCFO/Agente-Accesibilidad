@@ -181,10 +181,10 @@ export function buildDashboardHtml({ jobId, channel, scores, findings }) {
         color: summary.onti_conformance ? STATUS_GOOD : STATUS_CRITICAL,
         label: `${summary.onti_compliance_percentage}% de criterios ONTI conformes`
       })}
-      <p class="muted">${conformanceBadgeHtml(summary.onti_conformance)} — umbral regulatorio: ≥ ${summary.conformance_threshold}/${summary.onti_criteria_evaluated}</p>
+      <p class="muted">${conformanceBadgeHtml(summary.onti_conformance)} — umbral regulatorio: ≥ ${summary.conformance_threshold}/38 por norma${summary.onti_criteria_na > 0 ? ` (ajustado a ≥ ${summary.effective_conformance_threshold}/${summary.onti_criteria_evaluated} esta corrida — ${summary.onti_criteria_na} criterio(s) no aplican)` : ''}</p>
       <div class="stat-row">
-        ${statTile({ label: 'Nivel A (25 criterios)', value: `${summary.score_level_a}%` })}
-        ${statTile({ label: 'Nivel AA (13 criterios)', value: `${summary.score_level_aa}%` })}
+        ${statTile({ label: `Nivel A (${summary.score_level_a_evaluated} criterios)`, value: `${summary.score_level_a}%` })}
+        ${statTile({ label: `Nivel AA (${summary.score_level_aa_evaluated} criterios)`, value: `${summary.score_level_aa}%` })}
         ${statTile({ label: 'URLs evaluadas', value: String(summary.total_urls_evaluated) })}
       </div>
       <p class="muted">${COVERAGE_NOTE} Base: ${BASELINE_LABEL}.</p>

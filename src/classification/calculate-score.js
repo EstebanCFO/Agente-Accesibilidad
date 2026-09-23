@@ -27,17 +27,22 @@ export function calculateScore(classifiedFindings, {
   const ontiFindings = findings.filter((f) => f.in_scope === 'onti');
   const extendedFindings = findings.filter((f) => f.in_scope === 'extended_22');
 
+  const violatedOntiCriteria = new Set(ontiFindings.map((f) => f.wcag_criterion));
+
   // Los criterios N/A del cuerpo ONTI se calculan siempre con includeExtended:false - la capa
-  // extendida no tiene umbral regulatorio propio, no recibe este ajuste de denominador.
-  const naOntiCriteria = computeNaCriteria(axeResults, { includeExtended: false });
-  const naSet = new Set(naOntiCriteria);
+  // extendida no tiene umbral regulatorio propio, no recibe este ajuste de denominador. Un
+  // criterio con un finding real (de cualquier fuente - axe-core o visual_audit/ux_review) no
+  // puede ser N/A aunque axe lo haya marcado inapplicable: el algoritmo solo ve axe-core, pero
+  // visual_audit/ux_review pueden encontrar un problema real que axe nunca hubiera detectado.
+  const naOntiCriteriaRaw = computeNaCriteria(axeResults, { includeExtended: false });
+  const naSet = new Set(naOntiCriteriaRaw.filter((c) => !violatedOntiCriteria.has(c)));
   const evaluatedOntiCriteria = ontiCriteria.filter((c) => !naSet.has(c.wcag_criterion));
 
-  const violatedOntiCriteria = new Set(ontiFindings.map((f) => f.wcag_criterion));
   const ontiCriteriaCompliant = evaluatedOntiCriteria.length - violatedOntiCriteria.size;
 
-  const scoreForLevel = (level) => {
-    const criteria = evaluatedOntiCriteria.filter((c) => c.level === level);
+  const levelACriteria = evaluatedOntiCriteria.filter((c) => c.level === 'A');
+  const levelAACriteria = evaluatedOntiCriteria.filter((c) => c.level === 'AA');
+  const scoreForCriteria = (criteria) => {
     const compliant = criteria.filter((c) => !violatedOntiCriteria.has(c.wcag_criterion)).length;
     return percentage(compliant, criteria.length);
   };
@@ -115,11 +120,13 @@ export function calculateScore(classifiedFindings, {
       onti_criteria_na: naSet.size,
       onti_criteria_compliant: ontiCriteriaCompliant,
       onti_compliance_percentage: percentage(ontiCriteriaCompliant, evaluatedOntiCriteria.length),
-      onti_conformance: ontiCriteriaCompliant >= effectiveConformanceThreshold,
+      onti_conformance: evaluatedOntiCriteria.length > 0 && ontiCriteriaCompliant >= effectiveConformanceThreshold,
       conformance_threshold: conformanceThreshold,
       effective_conformance_threshold: effectiveConformanceThreshold,
-      score_level_a: scoreForLevel('A'),
-      score_level_aa: scoreForLevel('AA')
+      score_level_a: scoreForCriteria(levelACriteria),
+      score_level_a_evaluated: levelACriteria.length,
+      score_level_aa: scoreForCriteria(levelAACriteria),
+      score_level_aa_evaluated: levelAACriteria.length
     },
     extended_22: extended22,
     by_url: byUrl,

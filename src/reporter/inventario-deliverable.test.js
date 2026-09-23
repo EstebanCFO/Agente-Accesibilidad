@@ -56,4 +56,7 @@ test('buildInventarioWorkbook genera las 4 hojas que pide la SPEC §8.3', async 
 
   const resumen = workbook.getWorksheet('Resumen');
   assert.ok(resumen.rowCount > 1);
+
+  const headerValues = hallazgos.getRow(1).values;
+  assert.ok(headerValues.includes('Estado de revisión'), 'la hoja Hallazgos debe exponer la columna Estado de revisión');
 });

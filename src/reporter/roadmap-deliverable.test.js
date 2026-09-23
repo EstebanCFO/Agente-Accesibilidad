@@ -89,6 +89,18 @@ test('buildRoadmapJson envuelve los items con job_id y total_items', () => {
   assert.equal(doc.total_items, 1);
 });
 
+test('buildRoadmapItems conserva review_status de cada finding', () => {
+  const findings = [{ wcag_criterion: '1.1.1', wcag_level: 'A', in_scope: 'onti', severity: 'critical', review_status: 'requiere_revision', affected_urls: ['https://a.test'], occurrences: 1 }];
+  const items = buildRoadmapItems(findings);
+  assert.equal(items[0].review_status, 'requiere_revision');
+});
+
+test('buildRoadmapItems usa "confirmado" si review_status no viene en el finding', () => {
+  const findings = [{ wcag_criterion: '1.1.1', wcag_level: 'A', in_scope: 'onti', severity: 'critical', affected_urls: ['https://a.test'], occurrences: 1 }];
+  const items = buildRoadmapItems(findings);
+  assert.equal(items[0].review_status, 'confirmado');
+});
+
 test('buildRoadmapHtml escapa HTML en la descripción para evitar inyección', () => {
   const items = buildRoadmapItems([finding({ wcag_description: '<script>alert(1)</script>' })]);
   const html = buildRoadmapHtml({ jobId: 'job-1', channel: 'home_banking', items });

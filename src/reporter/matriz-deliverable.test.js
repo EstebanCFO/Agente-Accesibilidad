@@ -50,6 +50,13 @@ test('buildConformityMatrix ignora findings de la capa extendida si includeExten
   assert.ok(rows.every((r) => r.cells['https://a.test'] === 'conforme'));
 });
 
+test('buildConformityMatrix trata un review_status desconocido como "confirmado" (nunca asumir éxito)', () => {
+  const findings = [finding({ review_status: 'algo-inesperado', affected_urls: ['https://a.test'] })];
+  const { rows } = buildConformityMatrix({ findings, urls: ['https://a.test'] });
+  const criterio111 = rows.find((r) => r.wcag_criterion === '1.1.1');
+  assert.equal(criterio111.cells['https://a.test'], 'no_conforme');
+});
+
 test('buildSeverityImpactGrid cubre las 12 combinaciones severidad x impacto', () => {
   const grid = buildSeverityImpactGrid([]);
   assert.equal(grid.length, 12);

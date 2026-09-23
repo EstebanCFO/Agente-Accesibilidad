@@ -150,6 +150,26 @@ test('generateDeliverable("matriz") marca no_aplica cuando se pasan axe_results 
   assert.equal(criterio122.cells['https://a.test'], 'no_aplica');
 });
 
+test('generateDeliverable("matriz") no marca no_aplica si el criterio tiene un finding real de otra fuente', async () => {
+  const outputDir = await mkdtemp(path.join(tmpdir(), 'f1-deliverable-'));
+  const findings = [{
+    id: 'f1', wcag_criterion: '1.2.2', wcag_level: 'A', wcag_description: 'Subtítulos (grabado)',
+    in_scope: 'onti', severity: 'serious', review_status: 'confirmado', affected_urls: ['https://a.test'], occurrences: 1
+  }];
+  const axeResults = [
+    { url: 'https://a.test', violations: [], incomplete: [], passes: [], inapplicable: [{ id: 'video-caption', tags: ['wcag2a', 'wcag122'] }] }
+  ];
+
+  const filePaths = await generateDeliverable('matriz', {
+    jobId: 'job-c3', channel: 'home_banking', findings, urls: ['https://a.test'], axe_results: axeResults
+  }, { outputDir });
+
+  const jsonPath = filePaths.find((p) => p.endsWith('.json'));
+  const jsonDoc = JSON.parse(await readFile(jsonPath, 'utf8'));
+  const criterio122 = jsonDoc.conformity_matrix.rows.find((r) => r.wcag_criterion === '1.2.2');
+  assert.equal(criterio122.cells['https://a.test'], 'no_conforme', 'debe reflejar el finding real, no ocultarlo detrás de no_aplica');
+});
+
 test('generateDeliverable("dashboard") escribe dashboard.html con las secciones de la SPEC §8.2', async () => {
   const outputDir = await mkdtemp(path.join(tmpdir(), 'f1-deliverable-'));
   const scores = {

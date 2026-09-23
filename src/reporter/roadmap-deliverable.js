@@ -35,6 +35,10 @@ function isQuickWinEligible(ontiCriteriaCompliant, conformanceThreshold) {
 /**
  * estimated_effort queda siempre en null: la SPEC dice que lo genera el skill externo
  * `ibelick/improve-ui`, que todavía no está integrado (Sub-plan E). No se inventa un valor.
+ * NOTA: si el canal tiene criterios N/A, "conformanceThreshold" debería ser el
+ * effective_conformance_threshold de calculate_score (no el conformance_threshold crudo) para
+ * que "quick win" compare contra el umbral realmente vigente esta corrida - queda a criterio
+ * del agente al armar el input de este tool, no se fuerza en código.
  */
 export function buildRoadmapItems(findings, { ontiCriteriaCompliant = 0, conformanceThreshold = 30 } = {}) {
   const quickWinEligible = isQuickWinEligible(ontiCriteriaCompliant, conformanceThreshold);
@@ -45,6 +49,7 @@ export function buildRoadmapItems(findings, { ontiCriteriaCompliant = 0, conform
     wcag_description: finding.wcag_description,
     in_scope: finding.in_scope,
     severity: finding.severity,
+    review_status: finding.review_status ?? 'confirmado',
     affected_urls: finding.affected_urls || [],
     occurrences: finding.occurrences,
     quick_win_regulatorio: finding.in_scope === 'onti' && quickWinEligible,
@@ -133,6 +138,7 @@ export async function buildRoadmapWorkbook(items) {
     { header: 'Nivel', key: 'wcag_level', width: 8 },
     { header: 'Alcance', key: 'in_scope', width: 14 },
     { header: 'Severidad', key: 'severity', width: 12 },
+    { header: 'Estado de revisión', key: 'review_status', width: 18 },
     { header: 'Quick win regulatorio', key: 'quick_win_regulatorio', width: 20 },
     { header: 'URLs afectadas', key: 'affected_urls_count', width: 16 },
     { header: 'Ocurrencias', key: 'occurrences', width: 12 },
