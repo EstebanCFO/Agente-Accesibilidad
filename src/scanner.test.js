@@ -86,3 +86,21 @@ test('scanUrl sin capture flags no agrega screenshot ni html', async () => {
   assert.equal(result.screenshot, undefined);
   assert.equal(result.html, undefined);
 });
+
+test('scanUrl captura incomplete[], passes[] e inapplicable[] con su forma completa', async () => {
+  const result = await scanUrl({ url: 'https://example.com' });
+
+  assert.ok(Array.isArray(result.incomplete));
+  assert.ok(Array.isArray(result.passes));
+  assert.ok(Array.isArray(result.inapplicable));
+  assert.ok(result.passes.length > 0, 'example.com tiene reglas que pasan');
+  assert.ok(result.inapplicable.length > 0, 'example.com tiene reglas que no aplican (ej. sin <video>)');
+
+  const somePass = result.passes[0];
+  assert.ok(typeof somePass.id === 'string');
+  assert.ok(Array.isArray(somePass.tags));
+
+  const someInapplicable = result.inapplicable[0];
+  assert.ok(typeof someInapplicable.id === 'string');
+  assert.ok(Array.isArray(someInapplicable.tags));
+});

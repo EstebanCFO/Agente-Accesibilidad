@@ -58,7 +58,22 @@ function toAxeResult(url, results, extras = {}) {
         html: node.html,
         failure_summary: node.failureSummary
       }))
-    }))
+    })),
+    incomplete: results.incomplete.map((item) => ({
+      id: item.id,
+      impact: item.impact,
+      tags: item.tags,
+      help: item.help,
+      help_url: item.helpUrl,
+      node_count: item.nodes.length,
+      nodes: item.nodes.map((node) => ({
+        target: node.target,
+        html: node.html,
+        failure_summary: node.failureSummary
+      }))
+    })),
+    passes: results.passes.map((item) => ({ id: item.id, tags: item.tags })),
+    inapplicable: results.inapplicable.map((item) => ({ id: item.id, tags: item.tags }))
   };
   if (extras.screenshot) base.screenshot = extras.screenshot;
   if (extras.html) base.html = extras.html;
