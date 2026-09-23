@@ -33,6 +33,7 @@ test('normalizeReportedFindings arma un finding completo a partir de un item vá
   assert.equal(finding.onti_criterion, true);
   assert.equal(finding.in_scope, 'onti');
   assert.equal(finding.severity, 'serious');
+  assert.equal(finding.review_status, 'confirmado');
   assert.deepEqual(finding.affected_urls, ['https://a.test']);
   assert.equal(finding.occurrences, 1);
   assert.equal(finding.rule_id, 'visual_audit:contraste-insuficiente-en-boton-primario');

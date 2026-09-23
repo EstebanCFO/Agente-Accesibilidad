@@ -86,6 +86,7 @@ export function normalizeReportedFindings(rawFindings, { url, source, includeExt
       onti_criterion: criterion.in_scope === 'onti',
       in_scope: criterion.in_scope,
       severity,
+      review_status: 'confirmado',
       rule_id: `${source}:${slugify(failureSummary)}`,
       affected_urls: [url],
       occurrences: 1,
