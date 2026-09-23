@@ -18,7 +18,7 @@ import { calculateScore } from '../src/classification/calculate-score.js';
 import { runVisualAudit } from '../src/visual-review/visual-audit.js';
 import { runUxComplianceReview } from '../src/visual-review/ux-compliance-review.js';
 import { generateDeliverable } from '../src/reporter/generate-deliverable.js';
-import { resolveTargetUrl } from './demo-site-selection.js';
+import { resolveTargetUrl, resolveReferenceSiteUrl, REFERENCE_SITES } from './demo-site-selection.js';
 import { resolveAdditionalPageCount } from './demo-page-selection.js';
 import { isLocalPath, listHtmlFiles, toFileUrl } from './demo-local-source.js';
 import { buildHighlightTargets, buildBadgeText } from './demo-highlight.js';
@@ -89,10 +89,15 @@ async function main() {
 
   console.log('=== Demo: Agente F1 de Compliance de Accesibilidad ===');
   const choice = await rl.question(
-    '\n1) Sitio de demo (problemas reales, sin riesgo)\n2) Sitio del cliente (vas a pedir la URL)\n3) Otra URL o una carpeta local con archivos .html\n\nElegí una opción: '
+    '\n1) Sitio de referencia (problemas reales y documentados, sin riesgo)\n2) Sitio del cliente (vas a pedir la URL)\n3) Otra URL o una carpeta local con archivos .html\n\nElegí una opción: '
   );
   let customInput;
-  if (['2', '3'].includes(choice.trim())) {
+  let referenceSiteUrl;
+  if (choice.trim() === '1') {
+    const siteMenu = REFERENCE_SITES.map((site, i) => `  ${i + 1}) ${site.label}`).join('\n');
+    const subChoice = await rl.question(`\n${siteMenu}\n\nElegí un sitio de referencia: `);
+    referenceSiteUrl = resolveReferenceSiteUrl(subChoice);
+  } else if (['2', '3'].includes(choice.trim())) {
     customInput = await rl.question('Pegá la URL o el path de una carpeta local: ');
   }
 
@@ -123,7 +128,7 @@ async function main() {
       pagesToAudit = [mainUrl];
     }
   } else {
-    const targetUrl = resolveTargetUrl(choice, customInput);
+    const targetUrl = choice.trim() === '1' ? referenceSiteUrl : resolveTargetUrl(choice, customInput);
     console.log(`Recorriendo el sitio desde: ${targetUrl}`);
     console.log('(Esto puede tardar unos 25-30 segundos reales - el agente está navegando el sitio de verdad, no es un valor simulado.)');
     let discoveredUrls = [];
