@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Agente F1 - Panel de Control</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: Arial, Helvetica, sans-serif; background: #f4f6f9; color: #14213d;
+    padding: 14px 24px;
+  }
+  .brand { font-size: 13px; font-weight: 700; color: #2a78d6; letter-spacing: 0.4px; margin-bottom: 8px; }
+  .stepper { display: flex; align-items: center; gap: 6px; margin-bottom: 14px; }
+  .step {
+    flex: 1; text-align: center; padding: 6px 4px; border-radius: 6px; font-size: 12px; font-weight: 600;
+    background: #e3e8f0; color: #8a94a6; transition: background 0.3s, color 0.3s;
+  }
+  .step.done { background: #0ca30c; color: #fff; }
+  .step.active { background: #2a78d6; color: #fff; }
+  .prompt-text { font-size: 13px; font-weight: 600; color: #14213d; margin-bottom: 8px; min-height: 18px; }
+  .prompt-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 36px; }
+  .prompt-controls button {
+    background: #14213d; color: #fff; border: none; border-radius: 6px;
+    padding: 8px 16px; font-size: 13px; font-weight: 700; cursor: pointer;
+  }
+  .prompt-controls input {
+    padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 13px; min-width: 260px;
+  }
+  .working { font-size: 13px; color: #8a94a6; font-style: italic; }
+  .log {
+    font-size: 12px; color: #555; margin-top: 10px; font-family: Consolas, monospace;
+    line-height: 1.5; max-height: 60px; overflow: hidden; white-space: pre-line;
+  }
+</style>
+</head>
+<body>
+  <div class="brand">AGENTE F1 · PANEL DE CONTROL</div>
+  <div class="stepper" id="stepper"></div>
+  <div class="prompt-text" id="prompt-text"></div>
+  <div class="prompt-controls" id="prompt-controls">
+    <span class="working">Esperando conexión...</span>
+  </div>
+  <div class="log" id="log"></div>
+
+  <script>
+    const stepperEl = document.getElementById('stepper');
+    const promptTextEl = document.getElementById('prompt-text');
+    const promptControlsEl = document.getElementById('prompt-controls');
+    const logEl = document.getElementById('log');
+    const logLines = [];
+
+    function renderSteps(steps) {
+      stepperEl.innerHTML = '';
+      for (const step of steps) {
+        const div = document.createElement('div');
+        div.className = 'step ' + step.state;
+        div.textContent = step.label;
+        stepperEl.appendChild(div);
+      }
+    }
+
+    function sendAnswer(id, value) {
+      fetch('/answer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, value })
+      });
+      promptTextEl.textContent = '';
+      promptControlsEl.innerHTML = '<span class="working">Trabajando...</span>';
+    }
+
+    function renderPrompt(prompt) {
+      promptTextEl.textContent = prompt.text;
+      promptControlsEl.innerHTML = '';
+      if (prompt.kind === 'buttons') {
+        for (const option of prompt.options) {
+          const btn = document.createElement('button');
+          btn.textContent = option.label;
+          btn.onclick = () => sendAnswer(prompt.id, option.value);
+          promptControlsEl.appendChild(btn);
+        }
+      } else if (prompt.kind === 'text') {
+        const input = document.createElement('input');
+        input.type = 'text';
+        if (prompt.placeholder) input.placeholder = prompt.placeholder;
+        const btn = document.createElement('button');
+        btn.textContent = 'Enviar';
+        btn.onclick = () => sendAnswer(prompt.id, input.value);
+        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') btn.click(); });
+        promptControlsEl.appendChild(input);
+        promptControlsEl.appendChild(btn);
+        input.focus();
+      }
+    }
+
+    function appendLog(message) {
+      logLines.push(message);
+      while (logLines.length > 6) logLines.shift();
+      logEl.textContent = logLines.join('\n');
+    }
+
+    const events = new EventSource('/events');
+    events.addEventListener('step', (e) => renderSteps(JSON.parse(e.data).steps));
+    events.addEventListener('prompt', (e) => renderPrompt(JSON.parse(e.data)));
+    events.addEventListener('log', (e) => appendLog(JSON.parse(e.data).message));
+  </script>
+</body>
+</html>
