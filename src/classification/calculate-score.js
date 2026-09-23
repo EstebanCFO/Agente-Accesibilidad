@@ -1,5 +1,6 @@
 import { ontiCriteria, extendedCriteria } from './wcag-map.js';
 import { classifyModule } from './module-classifier.js';
+import { computeNaCriteria } from './na-criteria.js';
 
 function round2(n) {
   return Math.round(n * 100) / 100;
@@ -10,15 +11,12 @@ function percentage(compliant, total) {
   return round2((compliant / total) * 100);
 }
 
-function criteriaOfLevel(level) {
-  return ontiCriteria.filter((c) => c.level === level);
-}
-
 /**
  * Calcula compliance_scores (SPEC §8.1) a partir de classified_findings. axeResults es opcional
- * y solo se usa para saber qué URLs se escanearon de verdad (incluidas las que quedaron 100%
- * conformes, que no generan ningún finding) y para las cifras crudas de violations/incomplete
- * por URL; sin él, se aproxima con la unión de affected_urls de los findings.
+ * y se usa para: (1) saber qué URLs se escanearon de verdad (incluidas las 100% conformes, que
+ * no generan ningún finding), (2) las cifras crudas de violations/incomplete por URL, y (3)
+ * determinar qué criterios ONTI son N/A (computeNaCriteria) - sin él, no hay forma de saber que
+ * un criterio nunca tuvo contenido aplicable en ningún lado.
  */
 export function calculateScore(classifiedFindings, {
   axeResults = [],
@@ -29,14 +27,24 @@ export function calculateScore(classifiedFindings, {
   const ontiFindings = findings.filter((f) => f.in_scope === 'onti');
   const extendedFindings = findings.filter((f) => f.in_scope === 'extended_22');
 
+  // Los criterios N/A del cuerpo ONTI se calculan siempre con includeExtended:false - la capa
+  // extendida no tiene umbral regulatorio propio, no recibe este ajuste de denominador.
+  const naOntiCriteria = computeNaCriteria(axeResults, { includeExtended: false });
+  const naSet = new Set(naOntiCriteria);
+  const evaluatedOntiCriteria = ontiCriteria.filter((c) => !naSet.has(c.wcag_criterion));
+
   const violatedOntiCriteria = new Set(ontiFindings.map((f) => f.wcag_criterion));
-  const ontiCriteriaCompliant = ontiCriteria.length - violatedOntiCriteria.size;
+  const ontiCriteriaCompliant = evaluatedOntiCriteria.length - violatedOntiCriteria.size;
 
   const scoreForLevel = (level) => {
-    const criteria = criteriaOfLevel(level);
+    const criteria = evaluatedOntiCriteria.filter((c) => c.level === level);
     const compliant = criteria.filter((c) => !violatedOntiCriteria.has(c.wcag_criterion)).length;
     return percentage(compliant, criteria.length);
   };
+
+  const effectiveConformanceThreshold = evaluatedOntiCriteria.length === ontiCriteria.length
+    ? conformanceThreshold
+    : Math.round((conformanceThreshold / ontiCriteria.length) * evaluatedOntiCriteria.length);
 
   const scannedUrls = axeResults.length > 0
     ? [...new Set(axeResults.filter((r) => r && !r.error).map((r) => r.url))]
@@ -49,11 +57,11 @@ export function calculateScore(classifiedFindings, {
     const violatedForUrl = new Set(
       ontiFindings.filter((f) => (f.affected_urls || []).includes(url)).map((f) => f.wcag_criterion)
     );
-    const compliantForUrl = ontiCriteria.length - violatedForUrl.size;
+    const compliantForUrl = evaluatedOntiCriteria.length - violatedForUrl.size;
     return {
       url,
       module: classifyModule(url),
-      onti_compliance_percentage: percentage(compliantForUrl, ontiCriteria.length),
+      onti_compliance_percentage: percentage(compliantForUrl, evaluatedOntiCriteria.length),
       violations: axeResult?.violation_count ?? 0,
       incomplete: axeResult?.incomplete_count ?? 0
     };
@@ -72,11 +80,11 @@ export function calculateScore(classifiedFindings, {
         .filter((f) => (f.affected_urls || []).some((url) => moduleUrls.has(url)))
         .map((f) => f.wcag_criterion)
     );
-    const compliantForModule = ontiCriteria.length - violatedForModule.size;
+    const compliantForModule = evaluatedOntiCriteria.length - violatedForModule.size;
     return {
       module,
       url_count: entries.length,
-      onti_compliance_percentage: percentage(compliantForModule, ontiCriteria.length),
+      onti_compliance_percentage: percentage(compliantForModule, evaluatedOntiCriteria.length),
       violations: entries.reduce((sum, e) => sum + e.violations, 0),
       incomplete: entries.reduce((sum, e) => sum + e.incomplete, 0)
     };
@@ -103,11 +111,13 @@ export function calculateScore(classifiedFindings, {
   return {
     summary: {
       total_urls_evaluated: scannedUrls.length,
-      onti_criteria_evaluated: ontiCriteria.length,
+      onti_criteria_evaluated: evaluatedOntiCriteria.length,
+      onti_criteria_na: naSet.size,
       onti_criteria_compliant: ontiCriteriaCompliant,
-      onti_compliance_percentage: percentage(ontiCriteriaCompliant, ontiCriteria.length),
-      onti_conformance: ontiCriteriaCompliant >= conformanceThreshold,
+      onti_compliance_percentage: percentage(ontiCriteriaCompliant, evaluatedOntiCriteria.length),
+      onti_conformance: ontiCriteriaCompliant >= effectiveConformanceThreshold,
       conformance_threshold: conformanceThreshold,
+      effective_conformance_threshold: effectiveConformanceThreshold,
       score_level_a: scoreForLevel('A'),
       score_level_aa: scoreForLevel('AA')
     },

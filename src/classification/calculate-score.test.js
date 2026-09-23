@@ -145,3 +145,33 @@ test('calculateScore: by_module agrega URLs del mismo módulo con criterio peor-
   assert.equal(onboarding.url_count, 1);
   assert.equal(onboarding.onti_compliance_percentage, 100);
 });
+
+test('calculateScore: un criterio N/A se resta del denominador y el umbral escala proporcionalmente', () => {
+  const axeResults = [
+    { url: 'https://a.test', violation_count: 0, incomplete_count: 0, violations: [], incomplete: [], passes: [], inapplicable: [{ id: 'video-caption', tags: ['wcag2a', 'wcag122'] }] }
+  ];
+  const { summary } = calculateScore([], { axeResults });
+
+  assert.equal(summary.onti_criteria_evaluated, 37);
+  assert.equal(summary.onti_criteria_na, 1);
+  assert.equal(summary.onti_criteria_compliant, 37);
+  assert.equal(summary.onti_compliance_percentage, 100);
+  assert.equal(summary.effective_conformance_threshold, Math.round((30 / 38) * 37));
+  assert.equal(summary.onti_conformance, true);
+});
+
+test('calculateScore: sin criterios N/A, effective_conformance_threshold es igual a conformance_threshold', () => {
+  const { summary } = calculateScore([]);
+  assert.equal(summary.onti_criteria_na, 0);
+  assert.equal(summary.effective_conformance_threshold, summary.conformance_threshold);
+});
+
+test('calculateScore: un finding con review_status:"requiere_revision" cuenta como no conforme igual que uno "confirmado"', () => {
+  const findings = [{
+    id: 'f1', wcag_criterion: '1.4.3', wcag_level: 'AA', onti_criterion: true, in_scope: 'onti',
+    severity: 'serious', review_status: 'requiere_revision', rule_id: 'color-contrast',
+    affected_urls: ['https://a.test'], occurrences: 1
+  }];
+  const { summary } = calculateScore(findings, { axeResults: [{ url: 'https://a.test', violation_count: 0, incomplete_count: 1 }] });
+  assert.equal(summary.onti_criteria_compliant, 37);
+});
