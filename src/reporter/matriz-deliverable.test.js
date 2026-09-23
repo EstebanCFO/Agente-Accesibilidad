@@ -94,3 +94,52 @@ test('buildModuleConformityMatrix agrupa URLs del mismo módulo y hereda no_conf
   assert.equal(criterio111.cells['home-banking'], 'no_conforme');
   assert.equal(criterio111.cells['onboarding'], 'conforme');
 });
+
+test('buildConformityMatrix marca parcialmente_conforme cuando el único finding tiene review_status:"requiere_revision"', () => {
+  const findings = [finding({ review_status: 'requiere_revision', affected_urls: ['https://a.test'] })];
+  const { rows } = buildConformityMatrix({ findings, urls: ['https://a.test', 'https://b.test'] });
+  const criterio111 = rows.find((r) => r.wcag_criterion === '1.1.1');
+  assert.equal(criterio111.cells['https://a.test'], 'parcialmente_conforme');
+  assert.equal(criterio111.cells['https://b.test'], 'conforme');
+});
+
+test('buildConformityMatrix prioriza no_conforme sobre parcialmente_conforme para la misma celda', () => {
+  const findings = [
+    finding({ review_status: 'requiere_revision', rule_id: 'r1', affected_urls: ['https://a.test'] }),
+    finding({ review_status: 'confirmado', rule_id: 'r2', affected_urls: ['https://a.test'] })
+  ];
+  const { rows } = buildConformityMatrix({ findings, urls: ['https://a.test'] });
+  const criterio111 = rows.find((r) => r.wcag_criterion === '1.1.1');
+  assert.equal(criterio111.cells['https://a.test'], 'no_conforme');
+});
+
+test('buildConformityMatrix marca no_aplica en toda la fila de un criterio listado en naCriteria', () => {
+  const findings = [finding({ affected_urls: ['https://a.test'] })];
+  const { rows } = buildConformityMatrix({ findings, urls: ['https://a.test', 'https://b.test'], naCriteria: ['1.1.1'] });
+  const criterio111 = rows.find((r) => r.wcag_criterion === '1.1.1');
+  assert.equal(criterio111.cells['https://a.test'], 'no_aplica');
+  assert.equal(criterio111.cells['https://b.test'], 'no_aplica');
+});
+
+test('buildModuleConformityMatrix hereda parcialmente_conforme si ninguna URL del módulo tiene un finding confirmado', () => {
+  const findings = [finding({ review_status: 'requiere_revision', affected_urls: ['https://a.test/home-banking/pago'] })];
+  const urls = ['https://a.test/home-banking/pago', 'https://a.test/home-banking/transferencias'];
+  const { rows } = buildModuleConformityMatrix({ findings, urls });
+  const criterio111 = rows.find((r) => r.wcag_criterion === '1.1.1');
+  assert.equal(criterio111.cells['home-banking'], 'parcialmente_conforme');
+});
+
+test('buildModuleConformityMatrix respeta naCriteria a nivel de módulo también', () => {
+  const { rows } = buildModuleConformityMatrix({ findings: [], urls: ['https://a.test/home-banking/pago'], naCriteria: ['1.1.1'] });
+  const criterio111 = rows.find((r) => r.wcag_criterion === '1.1.1');
+  assert.equal(criterio111.cells['home-banking'], 'no_aplica');
+});
+
+test('buildMatrizHtml renderiza las etiquetas "Parcial" y "N/A" además de Conforme/No conforme', () => {
+  const findings = [finding({ rule_id: 'r1', review_status: 'requiere_revision', wcag_criterion: '2.4.4', wcag_level: 'A', wcag_description: 'Propósito del enlace', affected_urls: ['https://a.test'] })];
+  const conformity = buildConformityMatrix({ findings, urls: ['https://a.test'], naCriteria: ['1.2.2'] });
+  const grid = buildSeverityImpactGrid([]);
+  const html = buildMatrizHtml({ jobId: 'job-1', channel: 'home_banking', conformity, severityImpactGrid: grid });
+  assert.match(html, /Parcial/);
+  assert.match(html, /N\/A/);
+});

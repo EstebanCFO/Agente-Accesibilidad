@@ -6,6 +6,7 @@ const SEVERITY_ORDER = ['critical', 'serious', 'moderate', 'minor'];
 const IMPACT_ORDER = ['bloqueante', 'degradado', 'menor'];
 const SEVERITY_LABEL_ES = { critical: 'Crítico', serious: 'Alto', moderate: 'Medio', minor: 'Bajo' };
 const IMPACT_LABEL_ES = { bloqueante: 'Bloqueante', degradado: 'Degradado', menor: 'Menor' };
+const STATUS_LABEL_ES = { conforme: 'Conforme', no_conforme: 'No conforme', parcialmente_conforme: 'Parcial', no_aplica: 'N/A' };
 
 /**
  * No hay ninguna fuente de datos de "impacto de negocio" todavía. En vez de inventar una,
@@ -27,17 +28,21 @@ function taggedCriteria(includeExtended) {
 
 /**
  * Vista detallada de conformidad criterio × URL individual (complementa la vista por
- * módulo de `buildModuleConformityMatrix`). Solo distingue 'conforme'/'no_conforme':
- * 'parcialmente_conforme' (requeriría clasificar los resultados "incomplete" de axe, que
- * classify_findings no procesa hoy) y 'no_aplica' (requeriría reglas de aplicabilidad por
- * canal) no se emiten.
+ * módulo de `buildModuleConformityMatrix`). 4 estados por celda: 'no_aplica' si el criterio de esa
+ * fila está en `naCriteria` (propiedad del criterio para todo el canal, no de una URL puntual);
+ * si no, 'no_conforme' si hay un finding review_status:'confirmado' afectando esa URL;
+ * si no, 'parcialmente_conforme' si hay uno review_status:'requiere_revision'; si no, 'conforme'.
  */
-export function buildConformityMatrix({ findings, urls, includeExtended = false }) {
-  const violated = new Set();
+export function buildConformityMatrix({ findings, urls, includeExtended = false, naCriteria = [] }) {
+  const naSet = new Set(naCriteria);
+  const confirmed = new Set();
+  const review = new Set();
+
   for (const finding of findings) {
     if (finding.in_scope !== 'onti' && !(includeExtended && finding.in_scope === 'extended_22')) continue;
+    const target = (finding.review_status ?? 'confirmado') === 'confirmado' ? confirmed : review;
     for (const url of finding.affected_urls || []) {
-      violated.add(`${url}::${finding.wcag_criterion}`);
+      target.add(`${url}::${finding.wcag_criterion}`);
     }
   }
 
@@ -46,10 +51,13 @@ export function buildConformityMatrix({ findings, urls, includeExtended = false 
     level: criterion.level,
     in_scope: criterion.in_scope,
     description: criterion.description,
-    cells: Object.fromEntries(urls.map((url) => [
-      url,
-      violated.has(`${url}::${criterion.wcag_criterion}`) ? 'no_conforme' : 'conforme'
-    ]))
+    cells: Object.fromEntries(urls.map((url) => {
+      if (naSet.has(criterion.wcag_criterion)) return [url, 'no_aplica'];
+      const key = `${url}::${criterion.wcag_criterion}`;
+      if (confirmed.has(key)) return [url, 'no_conforme'];
+      if (review.has(key)) return [url, 'parcialmente_conforme'];
+      return [url, 'conforme'];
+    }))
   }));
 
   return { urls, rows };
@@ -58,19 +66,25 @@ export function buildConformityMatrix({ findings, urls, includeExtended = false 
 /**
  * Vista adicional: mismo criterio de conformidad que `buildConformityMatrix`, pero agrupando
  * columnas por módulo (primer segmento de path, ver module-classifier.js) en vez de por URL
- * individual. Un módulo hereda 'no_conforme' de cualquiera de sus URLs (peor caso), mismo
- * criterio que ya usa calculate-score.js para by_module.
+ * individual. Un módulo hereda el peor estado de cualquiera de sus URLs
+ * (no_conforme > parcialmente_conforme > conforme), mismo criterio que ya usa calculate-score.js
+ * para by_module. 'no_aplica' es una propiedad del criterio para todo el canal, no depende de
+ * qué URLs caen en cada módulo.
  */
-export function buildModuleConformityMatrix({ findings, urls, includeExtended = false }) {
+export function buildModuleConformityMatrix({ findings, urls, includeExtended = false, naCriteria = [] }) {
   const urlToModule = new Map(urls.map((url) => [url, classifyModule(url)]));
   const modules = [...new Set(urls.map((url) => urlToModule.get(url)))];
+  const naSet = new Set(naCriteria);
 
-  const violated = new Set();
+  const confirmed = new Set();
+  const review = new Set();
+
   for (const finding of findings) {
     if (finding.in_scope !== 'onti' && !(includeExtended && finding.in_scope === 'extended_22')) continue;
+    const target = (finding.review_status ?? 'confirmado') === 'confirmado' ? confirmed : review;
     for (const url of finding.affected_urls || []) {
       const module = urlToModule.get(url) ?? classifyModule(url);
-      violated.add(`${module}::${finding.wcag_criterion}`);
+      target.add(`${module}::${finding.wcag_criterion}`);
     }
   }
 
@@ -79,10 +93,13 @@ export function buildModuleConformityMatrix({ findings, urls, includeExtended = 
     level: criterion.level,
     in_scope: criterion.in_scope,
     description: criterion.description,
-    cells: Object.fromEntries(modules.map((module) => [
-      module,
-      violated.has(`${module}::${criterion.wcag_criterion}`) ? 'no_conforme' : 'conforme'
-    ]))
+    cells: Object.fromEntries(modules.map((module) => {
+      if (naSet.has(criterion.wcag_criterion)) return [module, 'no_aplica'];
+      const key = `${module}::${criterion.wcag_criterion}`;
+      if (confirmed.has(key)) return [module, 'no_conforme'];
+      if (review.has(key)) return [module, 'parcialmente_conforme'];
+      return [module, 'conforme'];
+    }))
   }));
 
   return { modules, rows };
@@ -132,7 +149,7 @@ function conformityTableHtml({ columns, rows }) {
   const bodyRows = rows.map((row) => {
     const cells = columns.map((column) => {
       const status = row.cells[column];
-      return `<td class="status-${status}">${status === 'conforme' ? 'Conforme' : 'No conforme'}</td>`;
+      return `<td class="status-${status}">${STATUS_LABEL_ES[status] ?? status}</td>`;
     }).join('');
     return `<tr>
       <td>${escapeHtml(row.wcag_criterion)}</td>
@@ -182,6 +199,8 @@ export function buildMatrizHtml({ jobId, channel, conformity, moduleConformity, 
   th { background: #14213d; color: #fff; }
   td.status-conforme { background: #e6f4ea; color: #1e7a34; }
   td.status-no_conforme { background: #fdecea; color: #a01818; }
+  td.status-parcialmente_conforme { background: #fff4e0; color: #8a5a00; }
+  td.status-no_aplica { background: #eeeeee; color: #666; }
 </style>
 </head>
 <body>
@@ -209,7 +228,7 @@ function addConformitySheet(workbook, name, { columns, rows }) {
   sheet.addRows(rows.map((row) => {
     const rowData = { wcag_criterion: row.wcag_criterion, level: row.level, in_scope: row.in_scope, description: row.description };
     columns.forEach((column, index) => {
-      rowData[`col_${index}`] = row.cells[column] === 'conforme' ? 'Conforme' : 'No conforme';
+      rowData[`col_${index}`] = STATUS_LABEL_ES[row.cells[column]] ?? row.cells[column];
     });
     return rowData;
   }));

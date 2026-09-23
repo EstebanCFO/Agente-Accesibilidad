@@ -4,6 +4,7 @@ import { buildScoreDeliverable } from './score-deliverable.js';
 import { buildInventarioJson, buildInventarioWorkbook } from './inventario-deliverable.js';
 import { buildRoadmapItems, buildRoadmapJson, buildRoadmapHtml, buildRoadmapWorkbook } from './roadmap-deliverable.js';
 import { buildConformityMatrix, buildModuleConformityMatrix, buildSeverityImpactGrid, buildMatrizJson, buildMatrizHtml, buildMatrizWorkbook } from './matriz-deliverable.js';
+import { computeNaCriteria } from '../classification/na-criteria.js';
 import { buildDashboardHtml } from './dashboard-deliverable.js';
 import { buildConsolidatedDashboardHtml } from './consolidated-dashboard-deliverable.js';
 
@@ -57,8 +58,9 @@ const BUILDERS = {
   matriz: async (data, outputDir) => {
     const includeExtended = data.includeExtended ?? false;
     const urls = data.urls || [];
-    const conformity = buildConformityMatrix({ findings: data.findings, urls, includeExtended });
-    const moduleConformity = buildModuleConformityMatrix({ findings: data.findings, urls, includeExtended });
+    const naCriteria = computeNaCriteria(data.axeResults || [], { includeExtended: false });
+    const conformity = buildConformityMatrix({ findings: data.findings, urls, includeExtended, naCriteria });
+    const moduleConformity = buildModuleConformityMatrix({ findings: data.findings, urls, includeExtended, naCriteria });
     const severityImpactGrid = buildSeverityImpactGrid(data.findings);
 
     const jsonPath = await writeJsonFile(outputDir, 'matriz-criticidad.json', buildMatrizJson({
