@@ -232,6 +232,49 @@ test('generateDeliverable("dashboard-consolidado") escribe score-consolidado.jso
   assert.match(html, /App iOS/);
 });
 
+test('generateDeliverable("informe-narrativo") escribe json + html con los 38 criterios y el resumen', async () => {
+  const outputDir = await mkdtemp(path.join(tmpdir(), 'f1-deliverable-'));
+  const findings = [
+    {
+      id: 'f1', wcag_criterion: '1.1.1', wcag_level: 'A', in_scope: 'onti', severity: 'critical',
+      review_status: 'confirmado', source: 'axe-core', affected_urls: ['https://a.test'], occurrences: 1,
+      element_sample: '<img>', failure_summary: 'Falta alt', remediation_hint: 'Agregar alt'
+    }
+  ];
+
+  const filePaths = await generateDeliverable('informe-narrativo', {
+    jobId: 'job-narrativo', channel: 'home_banking', findings
+  }, { outputDir });
+
+  assert.equal(filePaths.length, 2);
+  const jsonPath = filePaths.find((p) => p.endsWith('.json'));
+  const htmlPath = filePaths.find((p) => p.endsWith('.html'));
+
+  const jsonDoc = JSON.parse(await readFile(jsonPath, 'utf8'));
+  assert.equal(jsonDoc.criterios.length, 38);
+  assert.equal(jsonDoc.criterios.find((c) => c.criterio === '1.1.1').estado, 'Crítico');
+  assert.equal(jsonDoc.resumen.conteo_por_estado['Crítico'], 1);
+
+  const html = await readFile(htmlPath, 'utf8');
+  assert.match(html, /Informe Narrativo de Accesibilidad/);
+  assert.match(html, /Resumen final/);
+});
+
+test('generateDeliverable("informe-narrativo") marca no_aplica en el JSON cuando se pasan axe_results con un criterio N/A', async () => {
+  const outputDir = await mkdtemp(path.join(tmpdir(), 'f1-deliverable-'));
+  const axeResults = [
+    { url: 'https://a.test', violations: [], incomplete: [], passes: [], inapplicable: [{ id: 'video-caption', tags: ['wcag2a', 'wcag122'] }] }
+  ];
+
+  const filePaths = await generateDeliverable('informe-narrativo', {
+    jobId: 'job-na', channel: 'home_banking', findings: [], axe_results: axeResults
+  }, { outputDir });
+
+  const jsonPath = filePaths.find((p) => p.endsWith('.json'));
+  const jsonDoc = JSON.parse(await readFile(jsonPath, 'utf8'));
+  assert.equal(jsonDoc.criterios.find((c) => c.criterio === '1.2.2').estado, 'No aplica');
+});
+
 test('generateDeliverable rechaza un tipo no implementado', async () => {
   const outputDir = await mkdtemp(path.join(tmpdir(), 'f1-deliverable-'));
   await assert.rejects(

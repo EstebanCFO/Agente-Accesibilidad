@@ -7,6 +7,7 @@ import { buildConformityMatrix, buildModuleConformityMatrix, buildSeverityImpact
 import { computeNaCriteria } from '../classification/na-criteria.js';
 import { buildDashboardHtml } from './dashboard-deliverable.js';
 import { buildConsolidatedDashboardHtml } from './consolidated-dashboard-deliverable.js';
+import { buildInformeNarrativoJson, buildInformeNarrativoHtml } from './informe-narrativo-deliverable.js';
 
 async function writeJsonFile(outputDir, filename, doc) {
   await mkdir(outputDir, { recursive: true });
@@ -83,6 +84,16 @@ const BUILDERS = {
     const html = buildDashboardHtml({ jobId: data.jobId, channel: data.channel, scores: data.scores, findings: data.findings });
     const filePath = await writeTextFile(outputDir, 'dashboard.html', html);
     return [filePath];
+  },
+  'informe-narrativo': async (data, outputDir) => {
+    const naCriteria = computeNaCriteria(data.axe_results ?? data.axeResults ?? [], { includeExtended: false });
+    const jsonPath = await writeJsonFile(outputDir, 'informe-narrativo.json', buildInformeNarrativoJson({
+      jobId: data.jobId, channel: data.channel, findings: data.findings, naCriteria, essentialFlows: data.essentialFlows
+    }));
+    const htmlPath = await writeTextFile(outputDir, 'informe-narrativo.html', buildInformeNarrativoHtml({
+      jobId: data.jobId, channel: data.channel, findings: data.findings, naCriteria, essentialFlows: data.essentialFlows
+    }));
+    return [jsonPath, htmlPath];
   },
   'dashboard-consolidado': async (data, outputDir) => {
     const jsonPath = await writeJsonFile(outputDir, 'score-consolidado.json', {
