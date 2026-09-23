@@ -99,3 +99,33 @@ test('classifyFindings ignora resultados de scan_batch que quedaron con error', 
 test('classifyFindings con lista vacía devuelve cero hallazgos', () => {
   assert.deepEqual(classifyFindings([]), { total_findings: 0, findings: [] });
 });
+
+test('classifyFindings marca review_status:"confirmado" en findings de violations', () => {
+  const axeResults = [axeResult('https://a.test', [violation('image-alt', ['wcag2a', 'wcag111'], 'critical', 1)])];
+  const { findings } = classifyFindings(axeResults);
+  assert.equal(findings[0].review_status, 'confirmado');
+});
+
+test('classifyFindings procesa incomplete[] y marca review_status:"requiere_revision"', () => {
+  const axeResults = [{
+    url: 'https://a.test',
+    violations: [],
+    incomplete: [violation('color-contrast', ['wcag2aa', 'wcag143'], 'serious', 1)]
+  }];
+  const { total_findings, findings } = classifyFindings(axeResults);
+  assert.equal(total_findings, 1);
+  assert.equal(findings[0].wcag_criterion, '1.4.3');
+  assert.equal(findings[0].review_status, 'requiere_revision');
+  assert.equal(findings[0].rule_id, 'color-contrast');
+});
+
+test('classifyFindings: si el mismo criterio+regla aparece confirmado en una URL e incompleto en otra, gana "confirmado"', () => {
+  const axeResults = [
+    { url: 'https://a.test', violations: [], incomplete: [violation('color-contrast', ['wcag2aa', 'wcag143'], 'serious', 1)] },
+    { url: 'https://b.test', violations: [violation('color-contrast', ['wcag2aa', 'wcag143'], 'serious', 1)], incomplete: [] }
+  ];
+  const { findings } = classifyFindings(axeResults);
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].review_status, 'confirmado');
+  assert.deepEqual(findings[0].affected_urls.sort(), ['https://a.test', 'https://b.test']);
+});
