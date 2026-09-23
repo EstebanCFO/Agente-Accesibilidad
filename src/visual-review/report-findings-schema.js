@@ -28,7 +28,11 @@ export const REPORT_FINDINGS_TOOL = {
       }
     },
     required: ['findings']
-  }
+  },
+  // Se cachea la definición de la tool en sí (Anthropic prompt caching): no cambia entre
+  // llamadas de visual_audit/ux_compliance_review, así que solo se paga precio completo la
+  // primera vez dentro de la ventana de caché (5 min ephemeral).
+  cache_control: { type: 'ephemeral' }
 };
 
 /**

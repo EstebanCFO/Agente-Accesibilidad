@@ -17,6 +17,13 @@ function fakeClient(toolInput) {
 
 const SAMPLE_HTML = '<form><input type="text"><span style="color:red">Error</span></form>';
 
+// El prompt ahora se manda en más de un bloque de texto (estático cacheable + dinámico con el
+// HTML) - esto concatena todos los bloques de texto para los checks de contenido que no les
+// importa en qué bloque puntual cae el texto.
+function allTextIn(content) {
+  return content.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
+}
+
 test('runUxComplianceReview requiere url y html', async () => {
   await assert.rejects(() => runUxComplianceReview({ url: '', html: SAMPLE_HTML }, { anthropicClient: fakeClient({ findings: [] }) }), /url/);
   await assert.rejects(() => runUxComplianceReview({ url: 'https://a.test', html: '' }, { anthropicClient: fakeClient({ findings: [] }) }), /html/);
@@ -57,7 +64,7 @@ test('runUxComplianceReview delimita el HTML de la página con marcadores explí
   const client = fakeClient({ findings: [] });
   await runUxComplianceReview({ url: 'https://a.test', html: SAMPLE_HTML }, { anthropicClient: client });
   const [params] = client.calls;
-  const text = params.messages[0].content.find((b) => b.type === 'text').text;
+  const text = allTextIn(params.messages[0].content);
   assert.ok(text.includes('INICIO HTML DE LA PÁGINA'));
   assert.ok(text.includes('FIN HTML DE LA PÁGINA'));
 });
@@ -66,7 +73,7 @@ test('runUxComplianceReview no incluye criterios extended_22 en el prompt por de
   const client = fakeClient({ findings: [] });
   await runUxComplianceReview({ url: 'https://a.test', html: SAMPLE_HTML }, { anthropicClient: client });
   const [params] = client.calls;
-  const text = params.messages[0].content.find((b) => b.type === 'text').text;
+  const text = allTextIn(params.messages[0].content);
   assert.ok(!text.includes('extended_22'));
 });
 
@@ -74,8 +81,23 @@ test('runUxComplianceReview incluye criterios extended_22 en el prompt cuando in
   const client = fakeClient({ findings: [] });
   await runUxComplianceReview({ url: 'https://a.test', html: SAMPLE_HTML }, { anthropicClient: client, includeExtended: true });
   const [params] = client.calls;
-  const text = params.messages[0].content.find((b) => b.type === 'text').text;
+  const text = allTextIn(params.messages[0].content);
   assert.ok(text.includes('extended_22'));
+});
+
+test('runUxComplianceReview separa el prompt en un bloque estático cacheable (guía + criterios) y uno dinámico con el HTML', async () => {
+  const client = fakeClient({ findings: [] });
+  await runUxComplianceReview({ url: 'https://a.test', html: SAMPLE_HTML }, { anthropicClient: client });
+  const [params] = client.calls;
+
+  const [staticBlock, dynamicBlock] = params.messages[0].content;
+  assert.equal(staticBlock.type, 'text');
+  assert.deepEqual(staticBlock.cache_control, { type: 'ephemeral' });
+  assert.ok(!staticBlock.text.includes(SAMPLE_HTML), 'el bloque estático no debe llevar el HTML de la página');
+
+  assert.equal(dynamicBlock.type, 'text');
+  assert.ok(dynamicBlock.text.includes(SAMPLE_HTML));
+  assert.equal(dynamicBlock.cache_control, undefined, 'el bloque con el HTML cambia en cada llamada, no se cachea');
 });
 
 test('runUxComplianceReview rechaza un HTML que supera el límite de trabajo', async () => {

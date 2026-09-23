@@ -8,6 +8,10 @@ test('REPORT_FINDINGS_TOOL tiene el nombre y schema esperados por tool_choice', 
   assert.ok(REPORT_FINDINGS_TOOL.input_schema.properties.findings);
 });
 
+test('REPORT_FINDINGS_TOOL trae cache_control para que Anthropic cachee su definición entre llamadas', () => {
+  assert.deepEqual(REPORT_FINDINGS_TOOL.cache_control, { type: 'ephemeral' });
+});
+
 test('criteriaListText incluye solo criterios ONTI por default (sin includeExtended)', () => {
   const text = criteriaListText();
   assert.match(text, /1\.1\.1/);

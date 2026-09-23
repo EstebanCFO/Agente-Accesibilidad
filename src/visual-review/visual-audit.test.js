@@ -90,3 +90,18 @@ test('runVisualAudit marca truncated:false cuando la respuesta no trae stop_reas
   const { truncated } = await runVisualAudit({ url: 'https://a.test', screenshot: 'ZmFrZQ==' }, { anthropicClient: client });
   assert.equal(truncated, false);
 });
+
+test('runVisualAudit separa el prompt en un bloque estático cacheable y uno dinámico con la URL', async () => {
+  const client = fakeClient({ findings: [] });
+  await runVisualAudit({ url: 'https://a.test', screenshot: 'ZmFrZQ==' }, { anthropicClient: client });
+  const [params] = client.calls;
+
+  const [staticBlock, dynamicBlock] = params.messages[0].content;
+  assert.equal(staticBlock.type, 'text');
+  assert.deepEqual(staticBlock.cache_control, { type: 'ephemeral' });
+  assert.ok(!staticBlock.text.includes('a.test'), 'el bloque estático no debe cambiar según la URL');
+
+  assert.equal(dynamicBlock.type, 'text');
+  assert.ok(dynamicBlock.text.includes('a.test'));
+  assert.equal(dynamicBlock.cache_control, undefined, 'el bloque con la URL cambia en cada llamada, no se cachea');
+});
