@@ -111,10 +111,13 @@ function pautaRowHtml(stat) {
   const hasData = stat.evaluated > 0;
   const pct = hasData ? round1((stat.compliant / stat.evaluated) * 100) : 0;
   const color = !hasData ? STATUS_NEUTRAL : pct >= 100 ? STATUS_GOOD : pct === 0 ? STATUS_CRITICAL : SEQUENTIAL_BLUE;
+  // Ancho mínimo visible para 0% - con width:0% la barra roja no se ve (0px), queda indistinguible
+  // de "sin datos". No afecta el texto, que sigue mostrando el % real.
+  const displayWidth = hasData ? Math.max(pct, 3) : 0;
   const valueLabel = hasData ? `${stat.compliant}/${stat.evaluated} (${pct}%)` : 'Sin criterios evaluados';
   return `<div class="pauta-row">
     <div class="pauta-label">${escapeHtml(stat.pauta)} ${escapeHtml(stat.label)}</div>
-    <div class="pauta-track"><div class="pauta-fill" style="width:${pct}%; background:${color}"></div></div>
+    <div class="pauta-track"><div class="pauta-fill" style="width:${displayWidth}%; background:${color}"></div></div>
     <div class="pauta-value">${escapeHtml(valueLabel)}</div>
   </div>`;
 }
