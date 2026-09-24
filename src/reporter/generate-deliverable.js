@@ -81,7 +81,8 @@ const BUILDERS = {
     return [jsonPath, htmlPath, xlsxPath];
   },
   dashboard: async (data, outputDir) => {
-    const html = buildDashboardHtml({ jobId: data.jobId, channel: data.channel, scores: data.scores, findings: data.findings });
+    const naCriteria = computeNaCriteria(data.axe_results ?? data.axeResults ?? [], { includeExtended: false });
+    const html = buildDashboardHtml({ jobId: data.jobId, channel: data.channel, scores: data.scores, findings: data.findings, naCriteria });
     const filePath = await writeTextFile(outputDir, 'dashboard.html', html);
     return [filePath];
   },

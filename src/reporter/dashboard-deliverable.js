@@ -1,4 +1,5 @@
 import { BASELINE_LABEL, COVERAGE_NOTE } from './score-deliverable.js';
+import { ontiCriteria } from '../classification/wcag-map.js';
 
 const SEVERITY_ORDER = ['critical', 'serious', 'moderate', 'minor'];
 const SEVERITY_LABEL_ES = { critical: 'Crítica', serious: 'Seria', moderate: 'Moderada', minor: 'Menor' };
@@ -9,6 +10,32 @@ const SEVERITY_COLOR = { critical: '#d03b3b', serious: '#ec835a', moderate: '#fa
 const STATUS_GOOD = '#0ca30c';
 const STATUS_CRITICAL = '#d03b3b';
 const SEQUENTIAL_BLUE = '#2a78d6';
+const STATUS_NEUTRAL = '#c9c8c2';
+
+// Taxonomía fija de WCAG 2.0 (Principios/Pautas) - no depende de datos del job, es la estructura
+// oficial de la norma. Nombres tal como los pidió el usuario (no necesariamente idénticos a la
+// traducción oficial de W3C, ej. "Perceptibilidad" en vez de "Perceptible").
+const PAUTA_LABELS = {
+  '1.1': 'Alternativas textuales',
+  '1.2': 'Contenido multimedia dependiente del tiempo',
+  '1.3': 'Adaptabilidad',
+  '1.4': 'Distinguible',
+  '2.1': 'Accesible a través del teclado',
+  '2.2': 'Tiempo suficiente',
+  '2.3': 'Ataques',
+  '2.4': 'Navegable',
+  '3.1': 'Legible',
+  '3.2': 'Predecible',
+  '3.3': 'Ayuda a la entrada de datos',
+  '4.1': 'Compatible'
+};
+
+const PRINCIPIOS_ORDENADOS = [
+  { numero: 1, nombre: 'Perceptibilidad', pautas: ['1.1', '1.2', '1.3', '1.4'] },
+  { numero: 2, nombre: 'Operabilidad', pautas: ['2.1', '2.2', '2.3', '2.4'] },
+  { numero: 3, nombre: 'Comprensibilidad', pautas: ['3.1', '3.2', '3.3'] },
+  { numero: 4, nombre: 'Robustez', pautas: ['4.1'] }
+];
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -29,21 +56,77 @@ function severityCounts(findings) {
   }));
 }
 
-/** SPEC §8.2 pide "Top 10 criterios ONTI más vulnerados" — solo ONTI, no la capa extendida. */
-function topOntiCriteria(findings, limit = 10) {
-  const byCriterion = new Map();
-  for (const finding of findings) {
-    if (finding.in_scope !== 'onti') continue;
-    if (!byCriterion.has(finding.wcag_criterion)) {
-      byCriterion.set(finding.wcag_criterion, {
-        wcag_criterion: finding.wcag_criterion,
-        description: finding.wcag_description,
-        occurrences: 0
-      });
+/**
+ * Clasifica cada uno de los 38 criterios ONTI como conforme/no_conforme/no_aplica. Un criterio
+ * con al menos un finding real (cualquier review_status) nunca es no_aplica, aunque esté en
+ * naCriteria - mismo criterio que ya usa calculate-score.js.
+ */
+function deriveOntiCriteriaStatus(findings, naCriteria = []) {
+  const naSet = new Set(naCriteria);
+  const violatedCriteria = new Set(
+    (findings || []).filter((f) => f.in_scope === 'onti').map((f) => f.wcag_criterion)
+  );
+  return ontiCriteria.map((c) => {
+    const pauta = c.wcag_criterion.split('.').slice(0, 2).join('.');
+    let status;
+    if (violatedCriteria.has(c.wcag_criterion)) {
+      status = 'no_conforme';
+    } else if (naSet.has(c.wcag_criterion)) {
+      status = 'no_aplica';
+    } else {
+      status = 'conforme';
     }
-    byCriterion.get(finding.wcag_criterion).occurrences += finding.occurrences;
-  }
-  return [...byCriterion.values()].sort((a, b) => b.occurrences - a.occurrences).slice(0, limit);
+    return { wcag_criterion: c.wcag_criterion, level: c.level, pauta, status };
+  });
+}
+
+function ontiComplianceSummary(criteriaStatus) {
+  const counts = { conforme: 0, no_conforme: 0, no_aplica: 0 };
+  for (const c of criteriaStatus) counts[c.status] += 1;
+  const evaluated = counts.conforme + counts.no_conforme;
+  const conformePct = evaluated > 0 ? round1((counts.conforme / evaluated) * 100) : 0;
+  const noConformePct = evaluated > 0 ? round1((counts.no_conforme / evaluated) * 100) : 0;
+  return { ...counts, evaluated, conformePct, noConformePct };
+}
+
+function ontiComplianceSummaryHtml(summary) {
+  return `<table>
+    <thead><tr><th>Estado</th><th>Cantidad</th><th>%</th></tr></thead>
+    <tbody>
+      <tr><td><span class="severity-swatch" style="background:${STATUS_GOOD}"></span>Conformes</td><td>${summary.conforme}</td><td>${summary.conformePct}%</td></tr>
+      <tr><td><span class="severity-swatch" style="background:${STATUS_CRITICAL}"></span>No conformes</td><td>${summary.no_conforme}</td><td>${summary.noConformePct}%</td></tr>
+      ${summary.no_aplica > 0 ? `<tr><td><span class="severity-swatch" style="background:${STATUS_NEUTRAL}"></span>No aplica</td><td>${summary.no_aplica}</td><td>—</td></tr>` : ''}
+    </tbody>
+  </table>`;
+}
+
+function pautaCompliance(criteriaStatus, pautaCode) {
+  const criteriaInPauta = criteriaStatus.filter((c) => c.pauta === pautaCode);
+  const evaluated = criteriaInPauta.filter((c) => c.status !== 'no_aplica');
+  const compliant = evaluated.filter((c) => c.status === 'conforme').length;
+  return { pauta: pautaCode, label: PAUTA_LABELS[pautaCode], compliant, evaluated: evaluated.length };
+}
+
+function pautaRowHtml(stat) {
+  const hasData = stat.evaluated > 0;
+  const pct = hasData ? round1((stat.compliant / stat.evaluated) * 100) : 0;
+  const color = !hasData ? STATUS_NEUTRAL : pct >= 100 ? STATUS_GOOD : pct === 0 ? STATUS_CRITICAL : SEQUENTIAL_BLUE;
+  const valueLabel = hasData ? `${stat.compliant}/${stat.evaluated} (${pct}%)` : 'Sin criterios evaluados';
+  return `<div class="pauta-row">
+    <div class="pauta-label">${escapeHtml(stat.pauta)} ${escapeHtml(stat.label)}</div>
+    <div class="pauta-track"><div class="pauta-fill" style="width:${pct}%; background:${color}"></div></div>
+    <div class="pauta-value">${escapeHtml(valueLabel)}</div>
+  </div>`;
+}
+
+function principiosPautasSectionHtml(criteriaStatus) {
+  return PRINCIPIOS_ORDENADOS.map((principio) => {
+    const rows = principio.pautas.map((pautaCode) => pautaCompliance(criteriaStatus, pautaCode));
+    return `<div class="pauta-group">
+      <h3>Principio ${principio.numero}: ${escapeHtml(principio.nombre)}</h3>
+      ${rows.map(pautaRowHtml).join('\n')}
+    </div>`;
+  }).join('\n');
 }
 
 function horizontalBarChart(rows, { valueKey, labelFn, color }) {
@@ -112,10 +195,11 @@ function extendedBlockHtml(extended22) {
   </section>`;
 }
 
-export function buildDashboardHtml({ jobId, channel, scores, findings }) {
+export function buildDashboardHtml({ jobId, channel, scores, findings, naCriteria = [] }) {
   const { summary, extended_22: extended22, by_url: byUrl, by_module: byModule = [] } = scores;
   const sevCounts = severityCounts(findings);
-  const topCriteria = topOntiCriteria(findings);
+  const criteriaStatus = deriveOntiCriteriaStatus(findings, naCriteria);
+  const complianceSummary = ontiComplianceSummary(criteriaStatus);
 
   return `<!doctype html>
 <html lang="es">
@@ -162,6 +246,14 @@ export function buildDashboardHtml({ jobId, channel, scores, findings }) {
   .hbar-value { font-size: 0.8rem; color: var(--ink-secondary); text-align: right; }
   .empty { color: var(--muted); font-size: 0.85rem; }
   .severity-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
+  .pauta-group { margin-bottom: 1rem; }
+  .pauta-group:last-child { margin-bottom: 0; }
+  .pauta-group h3 { font-size: 0.85rem; font-weight: 700; margin: 0 0 0.5rem; color: var(--ink-secondary); }
+  .pauta-row { display: grid; grid-template-columns: 300px 1fr 140px; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .pauta-label { font-size: 0.8rem; color: var(--ink-secondary); }
+  .pauta-track { background: var(--gridline); height: 14px; border-radius: 4px; overflow: hidden; }
+  .pauta-fill { height: 100%; border-radius: 0 4px 4px 0; }
+  .pauta-value { font-size: 0.78rem; color: var(--ink-secondary); text-align: right; }
   footer { color: var(--muted); font-size: 0.75rem; padding: 0 2rem 2rem; max-width: 1100px; margin: 0 auto; }
 </style>
 </head>
@@ -201,12 +293,13 @@ export function buildDashboardHtml({ jobId, channel, scores, findings }) {
     </section>
 
     <section class="card">
-      <h2>Top 10 criterios ONTI más vulnerados</h2>
-      ${horizontalBarChart(topCriteria, {
-        valueKey: 'occurrences',
-        labelFn: (r) => `${r.wcag_criterion} — ${r.description}`,
-        color: SEQUENTIAL_BLUE
-      })}
+      <h2>Cumplimiento de los 38 criterios ONTI (BCRA)</h2>
+      ${ontiComplianceSummaryHtml(complianceSummary)}
+    </section>
+
+    <section class="card">
+      <h2>Cumplimiento por Principio y Pauta WCAG</h2>
+      ${principiosPautasSectionHtml(criteriaStatus)}
     </section>
 
     <section class="card">

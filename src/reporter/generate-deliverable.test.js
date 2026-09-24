@@ -202,7 +202,8 @@ test('generateDeliverable("dashboard") escribe dashboard.html con las secciones 
   assert.match(html, /Dashboard Ejecutivo/);
   assert.match(html, /NO CONFORME/);
   assert.match(html, /Capa extendida WCAG 2\.2/);
-  assert.match(html, /Top 10 criterios ONTI más vulnerados/);
+  assert.match(html, /Cumplimiento de los 38 criterios ONTI \(BCRA\)/);
+  assert.match(html, /Cumplimiento por Principio y Pauta WCAG/);
   assert.match(html, /Distribución por módulo/);
   assert.match(html, /home-banking/);
   assert.match(html, /No disponible — los skills externos/);
