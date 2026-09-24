@@ -1,5 +1,24 @@
 import { chromium, errors as playwrightErrors } from 'playwright';
 import AxeBuilder from '@axe-core/playwright';
+import axeCore from 'axe-core';
+import esLocale from 'axe-core/locales/es.json' with { type: 'json' };
+
+// axe-core corre con su locale oficial en español (80 reglas / 92 checks traducidos por Deque)
+// para que help/failure_summary salgan nativos en los reportes en español, en vez del inglés
+// crudo por default. Verificado en vivo contra un sitio real: mismo conteo de violaciones,
+// solo cambia el idioma del texto. AxeBuilder reinyecta este mismo source en cada .analyze()
+// (incluso en la blank page interna de finishRun), así que el locale queda configurado siempre.
+const AXE_SOURCE_ES = `${axeCore.source};axe.configure({ locale: ${JSON.stringify(esLocale)} });`;
+
+// axe-core por default corre TODAS sus reglas, incluidas 5 que son puro ruido para este proyecto
+// (wcag2aaa/'deprecated' - color-contrast-enhanced, identical-links-same-purpose,
+// meta-refresh-no-exceptions, duplicate-id, duplicate-id-active). Verificado con axe.getRules():
+// restringir a este set solo excluye esas 5 - las ~30 reglas 'best-practice' sin tag WCAG
+// numerado (landmark-one-main, region, heading-order, skip-link, etc.) siguen corriendo, porque
+// se usan hoy en el scan crudo (conteos y resaltado en vivo del demo), aunque classify-findings.js
+// las marque out_of_scope para el compliance ONTI. No se restringe a solo tags WCAG numerados
+// -eso se probó primero y rompía justamente esas ~30 reglas best-practice.
+const DEFAULT_WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'];
 
 export class AuthRequiredError extends Error {
   constructor(url, status) {
@@ -103,10 +122,9 @@ async function scanOne(browser, { url, wcagTags, auth, viewport, timeout, waitFo
       throw new AuthRequiredError(url, response.status());
     }
 
-    const axeBuilder = new AxeBuilder({ page });
-    if (Array.isArray(wcagTags) && wcagTags.length > 0) {
-      axeBuilder.withTags(wcagTags);
-    }
+    const axeBuilder = new AxeBuilder({ page, axeSource: AXE_SOURCE_ES });
+    const tagsToUse = Array.isArray(wcagTags) && wcagTags.length > 0 ? wcagTags : DEFAULT_WCAG_TAGS;
+    axeBuilder.withTags(tagsToUse);
     const results = await axeBuilder.analyze();
 
     const extras = {};

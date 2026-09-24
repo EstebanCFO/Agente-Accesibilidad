@@ -25,6 +25,35 @@ test('scanUrl filtra por wcag_tags cuando se especifican', async () => {
   assert.ok(Array.isArray(result.violations));
 });
 
+test('scanUrl con wcagTags explícito restringe exactamente a esos tags, no al default', async () => {
+  const result = await scanUrl({ url: 'https://example.com', wcagTags: ['wcag2a'] });
+  const allItems = [...result.violations, ...result.incomplete, ...result.passes, ...result.inapplicable];
+  assert.ok(allItems.length > 0);
+  for (const item of allItems) {
+    assert.ok(item.tags.includes('wcag2a'), `la regla "${item.id}" no tiene el tag wcag2a (tags: ${item.tags.join(', ')})`);
+  }
+});
+
+test('scanUrl sin wcag_tags restringe por default a WCAG 2.0/2.1/2.2 (A/AA) + best-practice - nunca corre reglas AAA/deprecadas', async () => {
+  const DEFAULT_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'];
+  const result = await scanUrl({ url: 'https://www.w3.org/WAI/demos/bad/after/home.html' });
+  const allItems = [...result.violations, ...result.incomplete, ...result.passes, ...result.inapplicable];
+  assert.ok(allItems.length > 0);
+  for (const item of allItems) {
+    assert.ok(
+      item.tags.some((tag) => DEFAULT_TAGS.includes(tag)),
+      `la regla "${item.id}" no tiene ningún tag del set default (tags: ${item.tags.join(', ')})`
+    );
+  }
+});
+
+test('scanUrl aplica el locale oficial en español de axe-core (help/failure_summary en español, no en inglés)', async () => {
+  const result = await scanUrl({ url: 'https://example.com' });
+  const landmarkViolation = result.violations.find((v) => v.id === 'landmark-one-main');
+  assert.equal(landmarkViolation.help, 'El documento debe tener un punto de referencia main');
+  assert.match(landmarkViolation.nodes[0].failure_summary, /Corregir/);
+});
+
 test('scanUrl requiere url', async () => {
   await assert.rejects(() => scanUrl({}), /requiere "url"/);
 });
