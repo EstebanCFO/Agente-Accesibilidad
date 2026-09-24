@@ -28,9 +28,10 @@ import { computeWindowLayout } from './demo-window-layout.js';
 // confundir con que la demo se colgó) - se recorta a 6 para que el paso 1 quede en ~15-20s.
 const MAX_PAGES_TO_DISCOVER = 6;
 
-// Validado visualmente en un spike real contra la pantalla del presentador - ver
-// docs/superpowers/specs/2026-09-23-demo-panel-design.md antes de cambiar este valor.
-const PANEL_HEIGHT = 260;
+// Base validada visualmente en un spike real (260px) - ver
+// docs/superpowers/specs/2026-09-23-demo-panel-design.md. Agrandado +10% a pedido del usuario
+// para mejorar la legibilidad del panel (más lugar para el stepper/botones/log).
+const PANEL_HEIGHT = 286;
 
 /**
  * Demo guionada para audiencia C-level: pasos fijos y controlados por el presentador (no el
