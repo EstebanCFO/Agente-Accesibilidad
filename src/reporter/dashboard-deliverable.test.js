@@ -44,15 +44,21 @@ test('buildDashboardHtml incluye el bloque de capa extendida rotulado como no ex
   const scores = baseScores({ extended_22: { criteria_evaluated: 18, criteria_compliant: 18, compliance_percentage: 100, by_criterion: [] } });
   const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores, findings: [] });
   assert.match(html, /Capa extendida WCAG 2\.2/);
-  assert.match(html, /No exigida por BCRA\/ONTI/);
+  assert.match(html, /No exigida por la Circular BCRA/);
 });
 
-test('buildDashboardHtml muestra el resumen de cumplimiento de los 38 criterios ONTI (BCRA)', () => {
+test('buildDashboardHtml no menciona "ONTI" en ningún lado (el dashboard hace referencia a la Circular BCRA)', () => {
+  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: baseScores(), findings: [] });
+  assert.doesNotMatch(html, /ONTI/);
+  assert.match(html, /Circular BCRA/);
+});
+
+test('buildDashboardHtml muestra el resumen de cumplimiento de los 38 criterios (Circular BCRA)', () => {
   const findings = [
     { wcag_criterion: '1.1.1', wcag_description: 'Contenido no textual', in_scope: 'onti', severity: 'critical', occurrences: 1 }
   ];
   const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: baseScores(), findings });
-  assert.match(html, /Cumplimiento de los 38 criterios ONTI \(BCRA\)/);
+  assert.match(html, /Cumplimiento de los 38 criterios WCAG — Circular BCRA/);
   assert.match(html, /Conformes<\/td><td>37<\/td>/);
   assert.match(html, /No conformes<\/td><td>1<\/td>/);
   assert.doesNotMatch(html, />No aplica</);

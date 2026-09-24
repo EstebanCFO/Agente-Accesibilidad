@@ -1,5 +1,12 @@
-import { BASELINE_LABEL, COVERAGE_NOTE } from './score-deliverable.js';
 import { ontiCriteria } from '../classification/wcag-map.js';
+
+// El Dashboard Ejecutivo es para el cliente/directorio - no menciona "ONTI" (la norma técnica de
+// origen), hace referencia a la Circular BCRA en su lugar. score-compliance.json (score-
+// deliverable.js) es un contrato de datos técnico aparte y sigue citando ONTI 6/2019 sin cambios -
+// este pedido fue explícitamente solo sobre el dashboard.
+const DASHBOARD_BASELINE_LABEL = 'Circular BCRA — WCAG 2.0 A+AA (38 criterios)';
+const DASHBOARD_COVERAGE_NOTE = 'Score sobre los 38 criterios de la Circular BCRA por detección automática (~57% de barreras). '
+  + 'Los criterios que requieren AT reales se evalúan en F2.';
 
 const SEVERITY_ORDER = ['critical', 'serious', 'moderate', 'minor'];
 const SEVERITY_LABEL_ES = { critical: 'Crítica', serious: 'Seria', moderate: 'Moderada', minor: 'Menor' };
@@ -189,8 +196,8 @@ function visualUxSectionHtml(findings) {
 function extendedBlockHtml(extended22) {
   if (!extended22) return '';
   return `<section class="card">
-    <h2>Capa extendida WCAG 2.2 <span class="pill">No exigida por BCRA/ONTI</span></h2>
-    <p class="muted">Score separado — no incide en el compliance ONTI de arriba.</p>
+    <h2>Capa extendida WCAG 2.2 <span class="pill">No exigida por la Circular BCRA</span></h2>
+    <p class="muted">Score separado — no incide en el compliance de la Circular BCRA de arriba.</p>
     <div class="stat-row">
       ${statTile({ label: 'Criterios conformes', value: `${extended22.criteria_compliant}/${extended22.criteria_evaluated}` })}
       ${statTile({ label: 'Compliance', value: `${extended22.compliance_percentage}%` })}
@@ -269,12 +276,12 @@ export function buildDashboardHtml({ jobId, channel, scores, findings, naCriteri
     <p class="meta">Job: ${escapeHtml(jobId)} · Canal: ${escapeHtml(channel ?? 'N/D')} · Generado: ${new Date().toISOString()}</p>
 
     <section class="card">
-      <h2>Score de cumplimiento ONTI</h2>
+      <h2>Score de cumplimiento — Circular BCRA</h2>
       <div class="hero">${summary.onti_criteria_compliant}/${summary.onti_criteria_evaluated} <small style="font-size:1.2rem; color:var(--ink-secondary)">(${summary.onti_compliance_percentage}%)</small></div>
       ${meterHtml({
         value: summary.onti_criteria_compliant, max: summary.onti_criteria_evaluated,
         color: summary.onti_conformance ? STATUS_GOOD : STATUS_CRITICAL,
-        label: `${summary.onti_compliance_percentage}% de criterios ONTI conformes`
+        label: `${summary.onti_compliance_percentage}% de criterios conformes con la Circular BCRA`
       })}
       <p class="muted">${conformanceBadgeHtml(summary.onti_conformance)} — umbral regulatorio: ≥ ${summary.conformance_threshold}/38 por norma${summary.onti_criteria_na > 0 ? ` (ajustado a ≥ ${summary.effective_conformance_threshold}/${summary.onti_criteria_evaluated} esta corrida — ${summary.onti_criteria_na} criterio(s) no aplican)` : ''}</p>
       <div class="stat-row">
@@ -282,7 +289,7 @@ export function buildDashboardHtml({ jobId, channel, scores, findings, naCriteri
         ${statTile({ label: `Nivel AA (${summary.score_level_aa_evaluated} criterios)`, value: `${summary.score_level_aa}%` })}
         ${statTile({ label: 'URLs evaluadas', value: String(summary.total_urls_evaluated) })}
       </div>
-      <p class="muted">${COVERAGE_NOTE} Base: ${BASELINE_LABEL}.</p>
+      <p class="muted">${DASHBOARD_COVERAGE_NOTE} Base: ${DASHBOARD_BASELINE_LABEL}.</p>
     </section>
 
     <section class="card">
@@ -296,7 +303,7 @@ export function buildDashboardHtml({ jobId, channel, scores, findings, naCriteri
     </section>
 
     <section class="card">
-      <h2>Cumplimiento de los 38 criterios ONTI (BCRA)</h2>
+      <h2>Cumplimiento de los 38 criterios WCAG — Circular BCRA</h2>
       ${ontiComplianceSummaryHtml(complianceSummary)}
     </section>
 
