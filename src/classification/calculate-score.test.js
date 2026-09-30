@@ -203,3 +203,34 @@ test('calculateScore: onti_conformance nunca es true si no quedó ningún criter
   // alcanzable con la allowlist actual y por eso no se fuerza aquí con un mock más elaborado.
   assert.equal(summary.onti_conformance, true); // 38 evaluados, 38 conformes, umbral 0 -> conforme, sigue siendo correcto
 });
+
+test('calculateScore: los hallazgos de la revisión del Agente (visual/UX) no afectan el puntaje', () => {
+  const agentFindings = [
+    { id: 'v1', wcag_criterion: '1.4.3', wcag_level: 'AA', in_scope: 'onti', severity: 'serious', source: 'visual_audit', affected_urls: ['https://a.test'], occurrences: 1 },
+    { id: 'u1', wcag_criterion: '3.3.1', wcag_level: 'A', in_scope: 'onti', severity: 'serious', source: 'ux_review', affected_urls: ['https://a.test'], occurrences: 1 }
+  ];
+  const axeFinding = { id: 'x1', wcag_criterion: '1.1.1', wcag_level: 'A', in_scope: 'onti', severity: 'critical', source: 'axe-core', affected_urls: ['https://a.test'], occurrences: 1 };
+  const soloAxe = calculateScore([axeFinding]).summary;
+  const conAgente = calculateScore([axeFinding, ...agentFindings]).summary;
+  assert.deepEqual(conAgente, soloAxe);
+  assert.equal(conAgente.onti_criteria_compliant, 37);
+});
+
+test('calculateScore: expone wcag_section sin cambiar el summary existente', () => {
+  const axeResults = [{ url: 'https://a.test', violation_count: 0, incomplete_count: 0, violations: [], incomplete: [], passes: [], inapplicable: [] }];
+  const result = calculateScore([], { axeResults });
+  assert.equal(result.summary.onti_criteria_compliant, 38);
+  assert.equal(result.wcag_section.a_validar, 38);
+  assert.equal(result.wcag_section.ok, 0);
+});
+
+test('calculateScore: expone best_practices', () => {
+  const axeResults = [{ url: 'https://a.test', violation_count: 0, incomplete_count: 0, violations: [], incomplete: [],
+    passes: [{ id: 'region', tags: ['best-practice'] }], inapplicable: [], rule_impacts: { region: 'moderate' } }];
+  assert.equal(calculateScore([], { axeResults }).best_practices.score, 100);
+});
+
+test('calculateScore: wcag_section respeta includeExtended', () => {
+  const result = calculateScore([], { axeResults: [], includeExtended: true });
+  assert.equal(result.wcag_section.by_criterion.length, 56);
+});

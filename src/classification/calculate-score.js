@@ -1,6 +1,9 @@
 import { ontiCriteria, extendedCriteria } from './wcag-map.js';
 import { classifyModule } from './module-classifier.js';
 import { computeNaCriteria } from './na-criteria.js';
+import { splitFindings } from './finding-sources.js';
+import { computeWcagSection } from './wcag-section.js';
+import { computeBestPractices } from './best-practices.js';
 
 function round2(n) {
   return Math.round(n * 100) / 100;
@@ -23,7 +26,8 @@ export function calculateScore(classifiedFindings, {
   conformanceThreshold = 30,
   includeExtended = false
 } = {}) {
-  const findings = classifiedFindings || [];
+  // Solo axe-core puntúa: los hallazgos de la revisión del Agente son complementarios.
+  const findings = splitFindings(classifiedFindings || []).primary;
   const ontiFindings = findings.filter((f) => f.in_scope === 'onti');
   const extendedFindings = findings.filter((f) => f.in_scope === 'extended_22');
 
@@ -31,9 +35,8 @@ export function calculateScore(classifiedFindings, {
 
   // Los criterios N/A del cuerpo ONTI se calculan siempre con includeExtended:false - la capa
   // extendida no tiene umbral regulatorio propio, no recibe este ajuste de denominador. Un
-  // criterio con un finding real (de cualquier fuente - axe-core o visual_audit/ux_review) no
-  // puede ser N/A aunque axe lo haya marcado inapplicable: el algoritmo solo ve axe-core, pero
-  // visual_audit/ux_review pueden encontrar un problema real que axe nunca hubiera detectado.
+  // criterio con un finding real de axe-core no puede ser N/A aunque axe lo haya marcado
+  // inapplicable en otra página. Los hallazgos del Agente (visual/UX) no participan del puntaje.
   const naOntiCriteriaRaw = computeNaCriteria(axeResults, { includeExtended: false });
   const naSet = new Set(naOntiCriteriaRaw.filter((c) => !violatedOntiCriteria.has(c)));
   const evaluatedOntiCriteria = ontiCriteria.filter((c) => !naSet.has(c.wcag_criterion));
@@ -130,6 +133,9 @@ export function calculateScore(classifiedFindings, {
     },
     extended_22: extended22,
     by_url: byUrl,
-    by_module: byModule
+    by_module: byModule,
+    // Secciones del informe (spec 2026-09-30). Aditivo: los campos de arriba se retiran en el Plan C.
+    wcag_section: computeWcagSection(classifiedFindings, { axeResults, includeExtended }),
+    best_practices: computeBestPractices(axeResults)
   };
 }
