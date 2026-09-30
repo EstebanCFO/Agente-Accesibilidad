@@ -22,9 +22,9 @@ export function criteriaWithoutAutomatedRules() {
         if (m) covered.add(`${m[1]}.${m[2]}.${m[3]}`);
       }
     }
-    cachedCoverage = { axeVersion: axe.version, missing: ontiCriteria.map((c) => c.wcag_criterion).filter((c) => !covered.has(c)) };
+    cachedCoverage = { axeVersion: axe.version, covered, missing: ontiCriteria.map((c) => c.wcag_criterion).filter((c) => !covered.has(c)) };
   } catch {
-    cachedCoverage = { axeVersion: null, missing: [] };
+    cachedCoverage = { axeVersion: null, covered: null, missing: [] };
   }
   return cachedCoverage;
 }
@@ -66,4 +66,14 @@ export function manualReviewFor(criterion) {
 export function manualReviewLabel(criterion) {
   const r = manualReviewFor(criterion);
   return r.assistive ? `Requiere tecnología asistiva: ${r.method.toLowerCase()}` : `Requiere revisión manual: ${r.method.toLowerCase()}`;
+}
+
+/**
+ * ¿axe-core tiene alguna regla (no experimental ni deprecada) para este criterio? Vale también
+ * para la capa extendida 2.1/2.2. Si no se pudo cargar axe-core, se asume que sí (no se inventa
+ * un "requiere revisión manual").
+ */
+export function hasAutomatedRules(criterion) {
+  const { covered } = criteriaWithoutAutomatedRules();
+  return covered ? covered.has(criterion) : true;
 }

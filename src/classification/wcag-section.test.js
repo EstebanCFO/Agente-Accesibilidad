@@ -74,3 +74,45 @@ test('computeWcagSection: los conteos suman el total más los No aplica', () => 
   assert.equal(section.ok + section.nok + section.a_validar, section.total);
   assert.equal(section.total + section.no_aplica, 38);
 });
+
+const reasonOf = (section, criterion) => section.by_criterion.find((c) => c.wcag_criterion === criterion)?.reason;
+
+test('reason: OK verificado automáticamente', () => {
+  const section = computeWcagSection([], { axeResults: [page('https://a.test', { passes: [pass('image-alt', ['wcag2a', 'wcag111'])] })] });
+  assert.deepEqual(reasonOf(section, '1.1.1'), { code: 'verificado', text: 'Verificado automáticamente, sin problemas' });
+});
+
+test('reason: NOK cuenta las páginas afectadas', () => {
+  const nok = { ...finding('1.4.3', 'confirmado'), affected_urls: ['https://a.test', 'https://b.test'] };
+  const section = computeWcagSection([nok], { axeResults: [page('https://a.test'), page('https://b.test')] });
+  assert.deepEqual(reasonOf(section, '1.4.3'), { code: 'con_problemas', text: 'Problemas en 2 páginas' });
+});
+
+test('reason: A validar por incomplete dice que el agente no pudo determinarlo', () => {
+  const section = computeWcagSection([finding('1.4.3', 'requiere_revision')], { axeResults: [page('https://a.test')] });
+  assert.equal(reasonOf(section, '1.4.3').code, 'indeterminado');
+  assert.equal(reasonOf(section, '1.4.3').text, 'El agente no pudo determinarlo automáticamente');
+});
+
+test('reason: criterio sin reglas automáticas requiere tecnología asistiva o revisión manual', () => {
+  const section = computeWcagSection([], { axeResults: [page('https://a.test')] });
+  assert.deepEqual(reasonOf(section, '2.4.7'), { code: 'requiere_asistiva', text: 'Requiere tecnología asistiva: navegación solo con teclado' });
+  assert.equal(reasonOf(section, '1.4.5').code, 'requiere_manual');
+  assert.match(reasonOf(section, '1.4.5').text, /^Requiere revisión manual/);
+});
+
+test('reason: criterio con reglas pero sin elementos en las páginas queda A validar sin_elementos', () => {
+  const section = computeWcagSection([], { axeResults: [page('https://a.test'), page('https://b.test')] });
+  assert.equal(statusOf(section, '1.1.1'), 'a_validar');
+  assert.deepEqual(reasonOf(section, '1.1.1'), {
+    code: 'sin_elementos',
+    text: 'Sin elementos evaluables: las reglas automáticas no encontraron elementos a revisar en las 2 páginas evaluadas'
+  });
+});
+
+test('reason: No aplica explica que no hay audio ni video', () => {
+  const section = computeWcagSection([], {
+    axeResults: [page('https://a.test', { inapplicable: [pass('audio-caption', ['wcag2a', 'wcag121'])] })]
+  });
+  assert.deepEqual(reasonOf(section, '1.2.1'), { code: 'sin_multimedia', text: 'No se encontró audio ni video en la página evaluada' });
+});
