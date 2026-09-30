@@ -152,6 +152,28 @@ Los 9 entregables se reorganizan en las tres secciones, en el orden del panel.
   los conteos de las tres secciones; se elimina el promedio de cumplimiento.
 - `finding-sources.js`: `COMPLEMENTARY_SOURCES` pasa a `['keyboard_review']`.
 
+## Agente autónomo, configuración y SPEC
+
+Además del demo, el agente (`src/agent-loop.js` + `src/tools/tool-registry.js`) usa lo mismo:
+
+- **Tools**: se eliminan `visual_audit` y `ux_compliance_review`; se agrega `keyboard_review`
+  (`url` + `keyboard_path` persistido a disco por `scan_url`/`scan_batch` con
+  `capture_keyboard: true`, mismo patrón de "path, no blob inline" que hoy usan screenshot/html).
+  `scan_url`/`scan_batch` reemplazan `capture_screenshot`/`capture_html` por `capture_keyboard`.
+- **`calculate_score`**: se elimina el parámetro `conformance_threshold`; devuelve los conteos de
+  las tres secciones.
+- **Prompt del agente** (`agent-loop.js:5`): se quita "umbral X/38" y se describe el resultado como
+  conteo OK / NOK / A validar sin veredicto.
+- **Config** (`src/config/validate-config.js`): `skills` pasa a
+  `{ keyboard_review: true, generate_remediation_plan: true }`; `wcag.conformance_threshold` se
+  elimina (validar que una config vieja con ese campo o con `visual_audit`/`ux_compliance_review`
+  no rompa: se ignora con aviso).
+- **SPEC**: `docs/reference/SPEC-agente-f1-compliance-v0.3.md` → **v0.4**. §19.2 registra que
+  `antfu/rams` y `Leonxlnx/web-design-guidelines` se reemplazan por `keyboard_review` (el segundo
+  repo no existe; ambos evaluaban cosas que no se pueden ver en una captura o HTML estático) y que
+  `ibelick/improve-ui` se mantiene como sub-proyecto 5. Se actualizan también las secciones de
+  umbral de conformidad y de entregables afectadas.
+
 ## Se elimina
 
 - `src/visual-review/visual-audit.js`, `ux-compliance-review.js`, `clean-html.js`,
@@ -176,6 +198,10 @@ Los 9 entregables se reorganizan en las tres secciones, en el orden del panel.
 
 1. Checklist manual con lector de pantalla basado en `screen-reader-testing`, completado con los
    criterios BCRA que le faltan (1.4.2, 1.4.5, 2.4.5).
-2. Patrones de remediación con código en la columna "Cómo corregir" del roadmap.
+2. `generate_remediation_plan` (`ibelick/improve-ui`, SPEC §19.2): verificar que el skill exista y
+   analizarlo; generar por cada NOK de la Sección 1 (y opcionalmente cada "Mejora sugerida" de la
+   Sección 2) problema, criterio, código correcto de ejemplo, esfuerzo estimado (completa
+   `roadmap.estimated_effort`, hoy `null`) y dependencias. Absorbe los patrones de corrección con
+   código de `wcag-audit-patterns` para la columna "Cómo corregir".
 3. Hoja de contactos con el recorrido dibujado sobre la captura (enfoque 2), si hace falta.
 4. Veredicto de cumplimiento tras la validación humana.
