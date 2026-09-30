@@ -283,7 +283,7 @@ test('generateDeliverable("informe-narrativo") escribe json + html con los 38 cr
   assert.match(html, /Informe general/);
 });
 
-test('generateDeliverable("informe-narrativo") marca no_aplica en el JSON cuando se pasan axe_results con un criterio N/A', async () => {
+test('generateDeliverable("informe-narrativo") deja a validar un multimedia sin video, con el motivo', async () => {
   const outputDir = await mkdtemp(path.join(tmpdir(), 'f1-deliverable-'));
   const axeResults = [
     { url: 'https://a.test', violations: [], incomplete: [], passes: [], inapplicable: [{ id: 'video-caption', tags: ['wcag2a', 'wcag122'] }] }
@@ -295,7 +295,9 @@ test('generateDeliverable("informe-narrativo") marca no_aplica en el JSON cuando
 
   const jsonPath = filePaths.find((p) => p.endsWith('.json'));
   const jsonDoc = JSON.parse(await readFile(jsonPath, 'utf8'));
-  assert.equal(jsonDoc.criterios.find((c) => c.criterio === '1.2.2').estado, 'No aplica');
+  const c122 = jsonDoc.criterios.find((c) => c.criterio === '1.2.2');
+  assert.equal(c122.estado, 'A validar');
+  assert.match(c122.motivo, /No se detectó audio ni video/);
 });
 
 test('generateDeliverable rechaza un tipo no implementado', async () => {

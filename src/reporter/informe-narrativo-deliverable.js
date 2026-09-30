@@ -1,9 +1,10 @@
 import { ontiCriteria } from '../classification/wcag-map.js';
 import { derivePrincipio, deriveSeveridad, worseSeveridad } from '../classification/criticidad.js';
-import { criteriaWithoutAutomatedRules, pageLabels, analyzedTarget, manualReviewFor, manualReviewLabel } from './report-helpers.js';
+import { pageLabels, analyzedTarget, manualReviewFor, manualReviewLabel } from './report-helpers.js';
+import { computeWcagSection } from '../classification/wcag-section.js';
 import { DS_CSS, DS_COLORS, DS_FRAMED_SCRIPT, dsHeaderHtml, dsFooterHtml, complementaryFindingsHtml } from './design-system.js';
 
-const HERRAMIENTA_LABEL = { 'axe-core': 'Agente', visual_audit: 'Revisión visual agéntica', ux_review: 'Revisión UX agéntica' };
+const HERRAMIENTA_LABEL = { 'axe-core': 'Agente', keyboard_review: 'Pruebas de teclado del Agente' };
 const NO_DETERMINADO_FLUJO = 'No determinado - requiere que el cliente indique qué páginas corresponden a flujos esenciales (login, transferencias, alta de producto).';
 const SEVERIDAD_A_ESTADO = { critico: 'Crítico', alto: 'Alto', medio: 'Medio', bajo: 'Bajo' };
 
@@ -43,7 +44,7 @@ function buildFlujosEsencialesAfectados(criterios, essentialFlows) {
   }
   const nombresAfectados = new Set();
   for (const c of criterios) {
-    if (c.estado === 'Cumple' || c.estado === 'No aplica') continue;
+    if (c.estado === 'OK') continue;
     for (const h of c.hallazgos) {
       const match = h.impacto_flujo?.match(/^Afecta el flujo esencial "([^"]+)"/);
       if (match) nombresAfectados.add(match[1]);
@@ -74,44 +75,43 @@ function buildResumen(criterios, essentialFlows) {
 }
 
 /**
- * Arma los 38 bloques del informe narrativo (uno por criterio ONTI), en orden numérico (no el
- * orden interno de onti-38-criteria.json, que agrupa por nivel A/AA) para que salgan agrupados
- * por Principio tal como pide el formato. Ver docs/superpowers/specs/
- * 2026-09-23-informe-narrativo-design.md para la prioridad de estado/severidad.
+ * Arma los 38 bloques del informe narrativo (uno por criterio ONTI), en orden numérico para que
+ * salgan agrupados por Principio. El estado sale de la Sección 1 (computeWcagSection), igual que
+ * la tarjeta del panel: NOK -> la severidad del peor hallazgo confirmado (Crítico/Alto/Medio/Bajo);
+ * OK; o "A validar" con su motivo (tecnología asistiva, revisión manual, sin elementos
+ * evaluables, sin audio/video, o no determinado automáticamente). Sin "Cumple" ni "No aplica".
  */
-export function buildInformeNarrativo({ findings, naCriteria = [], essentialFlows = [] }) {
-  const naSet = new Set(naCriteria);
-  const sinReglas = new Set(criteriaWithoutAutomatedRules().missing);
+export function buildInformeNarrativo({ findings, essentialFlows = [], axeResults = [], wcagSection = null }) {
+  const section = wcagSection ?? computeWcagSection(findings, { axeResults });
+  const byCriterion = new Map(section.by_criterion.map((c) => [c.wcag_criterion, c]));
   const criteriosOrdenados = [...ontiCriteria].sort(ordenNumerico);
 
   const criterios = criteriosOrdenados.map((criterio, index) => {
-    const findingsDelCriterio = (findings || []).filter((f) => f.wcag_criterion === criterio.wcag_criterion && f.in_scope === 'onti');
+    const findingsDelCriterio = (findings || []).filter((f) => f.wcag_criterion === criterio.wcag_criterion && f.in_scope === 'onti' && (!f.source || f.source === 'axe-core'));
     const confirmados = findingsDelCriterio.filter((f) => (f.review_status ?? 'confirmado') === 'confirmado');
     const requierenRevision = findingsDelCriterio.filter((f) => f.review_status === 'requiere_revision');
+    const seccion = byCriterion.get(criterio.wcag_criterion);
+    const motivoCodigo = seccion?.reason?.code ?? null;
 
     let estado;
-    if (naSet.has(criterio.wcag_criterion)) {
-      estado = 'No aplica';
-    } else if (confirmados.length > 0) {
-      const peorSeveridad = confirmados.map(deriveSeveridad).reduce(worseSeveridad);
-      estado = SEVERIDAD_A_ESTADO[peorSeveridad];
-    } else if (requierenRevision.length > 0) {
-      estado = 'Requiere revisión';
-    } else if (sinReglas.has(criterio.wcag_criterion)) {
-      estado = 'No evaluado';
+    if (seccion?.status === 'nok' && confirmados.length > 0) {
+      estado = SEVERIDAD_A_ESTADO[confirmados.map(deriveSeveridad).reduce(worseSeveridad)];
+    } else if (seccion?.status === 'ok') {
+      estado = 'OK';
     } else {
-      estado = 'Cumple';
+      estado = 'A validar';
     }
+    const requiereRevisionManual = motivoCodigo === 'requiere_asistiva' || motivoCodigo === 'requiere_manual';
 
     const hallazgos = findingsDelCriterio.length > 0
       ? findingsDelCriterio.map((f) => findingToHallazgo(f, essentialFlows))
-      : [{ descripcion: estado === 'No evaluado' ? 'Sin verificación automática disponible para este criterio.' : 'Sin hallazgos', herramientas: [], elementos_afectados: [], impacto_flujo: null }];
+      : [{ descripcion: estado === 'A validar' ? seccion.reason.text : 'Sin hallazgos', herramientas: [], elementos_afectados: [], impacto_flujo: null }];
 
     const recomendacion = confirmados[0]?.remediation_hint
       || requierenRevision[0]?.remediation_hint
-      || (estado === 'No evaluado'
-        ? `${manualReviewLabel(criterio.wcag_criterion)} (Fase 2).`
-        : 'Sin acción requerida - el criterio se cumple según la evaluación automática.');
+      || (requiereRevisionManual ? `${manualReviewLabel(criterio.wcag_criterion)} (Fase 2).` : null)
+      || (estado === 'A validar' ? `Validar manualmente: ${seccion.reason.text.charAt(0).toLowerCase()}${seccion.reason.text.slice(1)}.` : null)
+      || 'Sin acción requerida: el agente verificó el criterio sin encontrar problemas.';
 
     const paginas = [...new Set(findingsDelCriterio.flatMap((f) => f.affected_urls || []))];
     const elementos = findingsDelCriterio.reduce((sum, f) => sum + (f.occurrences ?? 0), 0);
@@ -123,19 +123,22 @@ export function buildInformeNarrativo({ findings, naCriteria = [], essentialFlow
       principio: derivePrincipio(criterio.wcag_criterion),
       nivel: criterio.level,
       estado,
+      motivo: seccion?.reason?.text ?? null,
+      motivo_codigo: motivoCodigo,
       hallazgos,
       recomendacion,
       paginas,
       elementos,
-      revision_manual: estado === 'No evaluado' ? manualReviewFor(criterio.wcag_criterion) : null
+      revision_manual: requiereRevisionManual ? manualReviewFor(criterio.wcag_criterion) : null
     };
   });
 
   return { criterios, resumen: buildResumen(criterios, essentialFlows) };
 }
 
-export function buildInformeNarrativoJson({ jobId, channel, findings, naCriteria, essentialFlows }) {
-  const { criterios, resumen } = buildInformeNarrativo({ findings, naCriteria, essentialFlows });
+export function buildInformeNarrativoJson({ jobId, channel, findings, essentialFlows, axeResults = [], scores = null }) {
+  const wcagSection = scores?.wcag_section ?? null;
+  const { criterios, resumen } = buildInformeNarrativo({ findings, essentialFlows, axeResults, wcagSection });
   return { job_id: jobId, channel: channel ?? null, generated_at: new Date().toISOString(), criterios, resumen };
 }
 
@@ -168,7 +171,7 @@ function criterioBlockHtml(c) {
 }
 
 const conPunto = (t) => (/[.!?]$/.test(String(t).trim()) ? String(t).trim() : `${String(t).trim()}.`);
-const ESTADO_ORDEN = { 'Crítico': 0, 'Alto': 1, 'Medio': 2, 'Bajo': 3, 'Requiere revisión': 4 };
+const ESTADO_ORDEN = { 'Crítico': 0, 'Alto': 1, 'Medio': 2, 'Bajo': 3 };
 const PROBLEMA_ESTADOS = new Set(Object.keys(ESTADO_ORDEN));
 
 /**
@@ -181,11 +184,10 @@ function informeGeneralHtml({ criterios, resumen, urls, scores, complementaryFin
   const target = analyzedTarget(allUrls);
   const cuenta = (estado) => criterios.filter((c) => c.estado === estado).length;
   const problemas = criterios.filter((c) => PROBLEMA_ESTADOS.has(c.estado)).sort((x, y) => ESTADO_ORDEN[x.estado] - ESTADO_ORDEN[y.estado]);
-  const noEvaluados = criterios.filter((c) => c.estado === 'No evaluado');
-  const conAT = noEvaluados.filter((c) => c.revision_manual?.assistive);
-  const sinAT = noEvaluados.filter((c) => !c.revision_manual?.assistive);
-  const cumple = cuenta('Cumple');
-  const noAplica = cuenta('No aplica');
+  const conAT = criterios.filter((c) => c.motivo_codigo === 'requiere_asistiva');
+  const sinAT = criterios.filter((c) => c.motivo_codigo === 'requiere_manual');
+  const sinElementos = criterios.filter((c) => c.motivo_codigo === 'sin_elementos' || c.motivo_codigo === 'sin_multimedia');
+  const cumple = cuenta('OK');
   const verificados = cumple + problemas.length;
   // Misma fuente que la tarjeta "Compliance WCAG" del panel: conteo sin veredicto.
   const section = scores?.wcag_section;
@@ -196,19 +198,20 @@ function informeGeneralHtml({ criterios, resumen, urls, scores, complementaryFin
 
   const problemasHtml = problemas.length === 0
     ? '<p>El agente no detectó incumplimientos en los criterios que puede verificar automáticamente.</p>'
-    : `<ol class="problemas">${problemas.map((c) => `<li><strong>${escapeHtml(c.criterio)} ${escapeHtml(c.nombre)}</strong> (Nivel ${escapeHtml(c.nivel)}, ${c.estado === 'Requiere revisión' ? 'requiere confirmación humana' : `prioridad ${escapeHtml(c.estado)}`}): presente en ${c.paginas.length} de ${allUrls.length} página(s)${c.elementos ? `, ${c.elementos} elemento(s)` : ''}${c.paginas.length > 0 ? ` — ${c.paginas.map((u) => escapeHtml(labels.get(u) ?? u)).join(', ')}` : ''}. ${escapeHtml(conPunto(c.recomendacion))}</li>`).join('\n')}</ol>`;
+    : `<ol class="problemas">${problemas.map((c) => `<li><strong>${escapeHtml(c.criterio)} ${escapeHtml(c.nombre)}</strong> (Nivel ${escapeHtml(c.nivel)}, prioridad ${escapeHtml(c.estado)}): presente en ${c.paginas.length} de ${allUrls.length} página(s)${c.elementos ? `, ${c.elementos} elemento(s)` : ''}${c.paginas.length > 0 ? ` — ${c.paginas.map((u) => escapeHtml(labels.get(u) ?? u)).join(', ')}` : ''}. ${escapeHtml(conPunto(c.recomendacion))}</li>`).join('\n')}</ol>`;
 
   const codigos = (lista) => lista.map((c) => `${c.criterio} ${c.nombre}`).join(', ');
-  const confirmados = problemas.filter((c) => c.estado !== 'Requiere revisión');
+  const confirmados = problemas;
   const nivelA = confirmados.filter((c) => c.nivel === 'A');
   const nivelAA = confirmados.filter((c) => c.nivel !== 'A');
-  const aConfirmar = problemas.filter((c) => c.estado === 'Requiere revisión');
+  const aConfirmar = criterios.filter((c) => c.motivo_codigo === 'indeterminado');
   const pasos = [
     nivelA.length > 0 ? `Corregir primero los criterios de Nivel A, que bloquean el uso: ${codigos(nivelA)}.` : null,
     nivelAA.length > 0 ? `${nivelA.length > 0 ? 'Después' : 'Corregir'} los de Nivel AA, que dificultan el uso: ${codigos(nivelAA)}.` : null,
     aConfirmar.length > 0 ? `Confirmar con una revisión humana: ${codigos(aConfirmar)}.` : null,
     conAT.length > 0 ? `Probar con tecnología asistiva (lector de pantalla y navegación con teclado) los ${conAT.length} criterios que la requieren.` : null,
-    sinAT.length > 0 ? `Completar la revisión manual de los otros ${sinAT.length} criterios sin verificación automática.` : null
+    sinAT.length > 0 ? `Completar la revisión manual de los otros ${sinAT.length} criterios sin verificación automática.` : null,
+    sinElementos.length > 0 ? `Confirmar manualmente los ${sinElementos.length} criterios que no tuvieron elementos evaluables en las páginas auditadas.` : null
   ].filter(Boolean);
   const recomendacion = pasos.length > 0
     ? `<ol>${pasos.map((p) => `<li>${escapeHtml(p)}</li>`).join('')}</ol>`
@@ -225,17 +228,19 @@ function informeGeneralHtml({ criterios, resumen, urls, scores, complementaryFin
 
     <h3>Resultado</h3>
     ${resultado}
-    <p>De los 38 criterios, el agente verificó automáticamente <strong>${verificados}</strong>: <strong>${cumple}</strong> se cumplen y <strong>${problemas.length}</strong> presentan problemas.${noEvaluados.length > 0 ? ` Otros <strong>${noEvaluados.length}</strong> no se pueden verificar de forma automática: <strong>${conAT.length} requieren tecnología asistiva</strong> (lector de pantalla o teclado) y ${sinAT.length} una revisión manual.` : ''}${noAplica > 0 ? ` ${noAplica} no aplican al sitio (no hay contenido de ese tipo).` : ''}</p>
+    <p>De los 38 criterios, el agente verificó automáticamente <strong>${verificados}</strong>: <strong>${cumple}</strong> están OK y <strong>${problemas.length}</strong> presentan problemas. Los otros <strong>${38 - verificados}</strong> quedan a validar: <strong>${conAT.length} requieren tecnología asistiva</strong> (lector de pantalla o teclado), ${sinAT.length} una revisión manual${sinElementos.length > 0 ? ` y ${sinElementos.length} no tuvieron elementos evaluables en las páginas auditadas` : ''}.</p>
 
     <h3>Principales problemas encontrados</h3>
     ${problemasHtml}
 
-    ${noEvaluados.length > 0 ? `<h3>Qué queda por revisar manualmente</h3>
-    <p>Estos criterios no tienen verificación automática. Que el agente no los marque no significa que se cumplan: hay que revisarlos en la Fase 2.</p>
+    ${conAT.length + sinAT.length + sinElementos.length > 0 ? `<h3>Qué queda a validar</h3>
+    <p>El agente no pudo verificar estos criterios. No cuentan como OK: hay que validarlos en la Fase 2.</p>
     ${conAT.length > 0 ? `<h4>Requieren tecnología asistiva (${conAT.length})</h4>
     <ul class="review-list">${conAT.map((c) => `<li><strong>${escapeHtml(c.criterio)} ${escapeHtml(c.nombre)}</strong> — ${escapeHtml(c.revision_manual.method)}</li>`).join('')}</ul>` : ''}
     ${sinAT.length > 0 ? `<h4>Requieren revisión manual sin tecnología asistiva (${sinAT.length})</h4>
-    <ul class="review-list">${sinAT.map((c) => `<li><strong>${escapeHtml(c.criterio)} ${escapeHtml(c.nombre)}</strong> — ${escapeHtml(c.revision_manual.method)}</li>`).join('')}</ul>` : ''}` : ''}
+    <ul class="review-list">${sinAT.map((c) => `<li><strong>${escapeHtml(c.criterio)} ${escapeHtml(c.nombre)}</strong> — ${escapeHtml(c.revision_manual.method)}</li>`).join('')}</ul>` : ''}
+    ${sinElementos.length > 0 ? `<h4>Sin elementos evaluables en las páginas auditadas (${sinElementos.length})</h4>
+    <ul class="review-list">${sinElementos.map((c) => `<li><strong>${escapeHtml(c.criterio)} ${escapeHtml(c.nombre)}</strong> — ${escapeHtml(c.motivo)}</li>`).join('')}</ul>` : ''}` : ''}
 
     <h3>Análisis complementario</h3>
     <p>${complementarios > 0 ? `La revisión visual y de UX agéntica aportó <strong>${complementarios} observación(es)</strong> adicionales (detalladas al final). Son orientativas y no modifican el resultado.` : 'La revisión visual y de UX agéntica no aportó observaciones en esta auditoría (o no estaba activa).'}</p>
@@ -246,8 +251,9 @@ function informeGeneralHtml({ criterios, resumen, urls, scores, complementaryFin
   </section>`;
 }
 
-export function buildInformeNarrativoHtml({ jobId, channel, findings, complementaryFindings = [], naCriteria, essentialFlows, urls, scores }) {
-  const { criterios, resumen } = buildInformeNarrativo({ findings, naCriteria, essentialFlows });
+export function buildInformeNarrativoHtml({ jobId, channel, findings, complementaryFindings = [], essentialFlows, urls, scores, axeResults = [] }) {
+  const wcagSection = scores?.wcag_section ?? null;
+  const { criterios, resumen } = buildInformeNarrativo({ findings, essentialFlows, axeResults, wcagSection });
   return `<!doctype html>
 <html lang="es">
 <head>
@@ -262,10 +268,8 @@ export function buildInformeNarrativoHtml({ jobId, channel, findings, complement
   section.criterio.estado-alto { border-left-color: var(--orange); }
   section.criterio.estado-medio { border-left-color: #E0A100; }
   section.criterio.estado-bajo { border-left-color: var(--text2); }
-  section.criterio.estado-cumple { border-left-color: var(--green); }
-  section.criterio.estado-no-aplica { border-left-color: var(--gray3); }
-  section.criterio.estado-requiere-revision { border-left-color: var(--blue); }
-  section.criterio.estado-no-evaluado { border-left-color: var(--gray3); background: var(--gray1); }
+  section.criterio.estado-ok { border-left-color: var(--green); }
+  section.criterio.estado-a-validar { border-left-color: var(--gray3); background: var(--gray1); }
   section.general { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 18px 22px; margin-bottom: 20px; }
   section.general h2 { margin-top: 0; }
   section.general h3 { color: var(--navy); font-size: 15px; margin: 18px 0 6px; }

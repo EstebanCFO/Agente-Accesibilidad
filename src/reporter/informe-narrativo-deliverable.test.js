@@ -30,25 +30,9 @@ test('buildInformeNarrativo devuelve los 38 criterios ordenados numéricamente p
   }
 });
 
-test('buildInformeNarrativo: sin findings, los criterios verificables quedan "Cumple" y los sin reglas "No evaluado"', () => {
-  const { criterios } = buildInformeNarrativo({ findings: [] });
-  assert.ok(criterios.every((c) => c.estado === (SIN_REGLAS.has(c.criterio) ? 'No evaluado' : 'Cumple')));
-  assert.deepEqual(criterios[0].hallazgos, [{ descripcion: 'Sin hallazgos', herramientas: [], elementos_afectados: [], impacto_flujo: null }]);
-});
-
-test('buildInformeNarrativo: un criterio en naCriteria queda "No aplica" aunque tenga findings', () => {
-  const { criterios } = buildInformeNarrativo({ findings: [finding()], naCriteria: ['1.1.1'] });
-  assert.equal(criterios.find((c) => c.criterio === '1.1.1').estado, 'No aplica');
-});
-
 test('buildInformeNarrativo: un finding confirmado da la severidad correspondiente como estado', () => {
   const { criterios } = buildInformeNarrativo({ findings: [finding({ wcag_level: 'A', severity: 'critical' })] });
   assert.equal(criterios.find((c) => c.criterio === '1.1.1').estado, 'Crítico');
-});
-
-test('buildInformeNarrativo: solo un finding "requiere_revision" (sin confirmado) da "Requiere revisión"', () => {
-  const { criterios } = buildInformeNarrativo({ findings: [finding({ review_status: 'requiere_revision' })] });
-  assert.equal(criterios.find((c) => c.criterio === '1.1.1').estado, 'Requiere revisión');
 });
 
 test('buildInformeNarrativo: un finding confirmado gana sobre uno requiere_revision del mismo criterio', () => {
@@ -57,14 +41,14 @@ test('buildInformeNarrativo: un finding confirmado gana sobre uno requiere_revis
     finding({ review_status: 'confirmado', severity: 'moderate' })
   ];
   const { criterios } = buildInformeNarrativo({ findings });
-  assert.notEqual(criterios.find((c) => c.criterio === '1.1.1').estado, 'Requiere revisión');
+  assert.notEqual(criterios.find((c) => c.criterio === '1.1.1').estado, 'A validar');
 });
 
 test('buildInformeNarrativo: hallazgos mapea descripcion/herramientas/elementos desde el finding', () => {
-  const { criterios } = buildInformeNarrativo({ findings: [finding({ source: 'visual_audit' })] });
+  const { criterios } = buildInformeNarrativo({ findings: [finding()] });
   const hallazgo = criterios.find((c) => c.criterio === '1.1.1').hallazgos[0];
   assert.equal(hallazgo.descripcion, 'Falta alt');
-  assert.deepEqual(hallazgo.herramientas, ['Revisión visual agéntica']);
+  assert.deepEqual(hallazgo.herramientas, ['Agente']);
   assert.deepEqual(hallazgo.elementos_afectados, ['<img>']);
   assert.match(hallazgo.impacto_flujo, /No determinado/);
 });
@@ -77,8 +61,9 @@ test('buildInformeNarrativo: resumen cuenta por estado y prioriza Crítico+Alto'
   const { resumen } = buildInformeNarrativo({ findings });
   assert.equal(resumen.conteo_por_estado['Crítico'], 1);
   assert.equal(resumen.conteo_por_estado['Alto'], 1);
-  assert.equal(resumen.conteo_por_estado['Cumple'], 36 - [...SIN_REGLAS].filter((c) => !['1.1.1', '2.4.4'].includes(c)).length);
-  assert.equal(resumen.conteo_por_estado['No evaluado'] ?? 0, [...SIN_REGLAS].filter((c) => !['1.1.1', '2.4.4'].includes(c)).length);
+  assert.equal(resumen.conteo_por_estado['A validar'], 36);
+  assert.equal(resumen.conteo_por_estado['Cumple'], undefined);
+  assert.equal(resumen.conteo_por_estado['No evaluado'], undefined);
   assert.equal(resumen.hallazgos_prioritarios.length, 2);
   assert.match(resumen.recomendacion_general, /1 criterio/);
 });
@@ -129,4 +114,30 @@ test('buildInformeNarrativoHtml resume con OK/NOK/a validar, sin veredicto ni um
   assert.match(html, /0 OK, 1 NOK y 37 a validar \(de 38\)/);
   assert.doesNotMatch(html, /CONFORME/);
   assert.doesNotMatch(html, /umbral regulatorio/i);
+});
+
+const pagina = (extra = {}) => ({ url: 'https://a.test', violations: [], incomplete: [], passes: [], inapplicable: [], ...extra });
+
+test('buildInformeNarrativo: sin datos de escaneo nada queda OK; con una regla aprobada, OK', () => {
+  assert.ok(buildInformeNarrativo({ findings: [] }).criterios.every((c) => c.estado === 'A validar'));
+  const { criterios } = buildInformeNarrativo({ findings: [], axeResults: [pagina({ passes: [{ id: 'image-alt', tags: ['wcag2a', 'wcag111'] }] })] });
+  assert.equal(criterios.find((c) => c.criterio === '1.1.1').estado, 'OK');
+});
+
+test('buildInformeNarrativo: cada criterio a validar explica el motivo', () => {
+  const { criterios } = buildInformeNarrativo({ findings: [finding({ review_status: 'requiere_revision' })], axeResults: [pagina({ inapplicable: [{ id: 'video-caption', tags: ['wcag2a', 'wcag122'] }] })] });
+  const c111 = criterios.find((c) => c.criterio === '1.1.1');
+  assert.equal(c111.estado, 'A validar');
+  assert.equal(c111.motivo, 'El agente no pudo determinarlo automáticamente');
+  assert.match(criterios.find((c) => c.criterio === '1.2.2').motivo, /No se detectó audio ni video/);
+  assert.ok(!criterios.some((c) => c.estado === 'No aplica' || c.estado === 'Cumple' || c.estado === 'No evaluado'));
+});
+
+test('buildInformeNarrativo: un criterio sin reglas automáticas indica la revisión que requiere', () => {
+  const primero = [...SIN_REGLAS][0];
+  if (!primero) return;
+  const c = buildInformeNarrativo({ findings: [], axeResults: [pagina()] }).criterios.find((x) => x.criterio === primero);
+  assert.equal(c.estado, 'A validar');
+  assert.ok(c.revision_manual);
+  assert.match(c.motivo, /^Requiere (tecnología asistiva|revisión manual)/);
 });

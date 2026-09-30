@@ -4,7 +4,6 @@ import { buildScoreDeliverable } from './score-deliverable.js';
 import { buildInventarioJson, buildInventarioHtml, buildInventarioWorkbook } from './inventario-deliverable.js';
 import { buildRoadmapItems, buildRoadmapJson, buildRoadmapHtml, buildRoadmapWorkbook } from './roadmap-deliverable.js';
 import { buildConformityMatrix, buildSeverityImpactGrid, buildMatrizJson, buildMatrizHtml, buildMatrizWorkbook } from './matriz-deliverable.js';
-import { computeNaCriteria } from '../classification/na-criteria.js';
 import { splitFindings } from '../classification/finding-sources.js';
 import { buildDashboardHtml } from './dashboard-deliverable.js';
 import { buildConsolidatedDashboardHtml } from './consolidated-dashboard-deliverable.js';
@@ -81,18 +80,19 @@ const BUILDERS = {
     return [jsonPath, htmlPath, xlsxPath];
   },
   dashboard: async (data, outputDir) => {
-    const naCriteria = computeNaCriteria(data.axe_results ?? data.axeResults ?? [], { includeExtended: false });
-    const html = buildDashboardHtml({ jobId: data.jobId, channel: data.channel, scores: data.scores, findings: data.findings, complementaryFindings: data.complementaryFindings, naCriteria, urls: data.urls, axeResults: data.axe_results ?? data.axeResults ?? [], includeExtended: data.includeExtended ?? false, keyboardResults: data.keyboardResults ?? [] });
+
+    const html = buildDashboardHtml({ jobId: data.jobId, channel: data.channel, scores: data.scores, findings: data.findings, complementaryFindings: data.complementaryFindings, urls: data.urls, axeResults: data.axe_results ?? data.axeResults ?? [], includeExtended: data.includeExtended ?? false, keyboardResults: data.keyboardResults ?? [] });
     const filePath = await writeTextFile(outputDir, 'dashboard.html', html);
     return [filePath];
   },
   'informe-narrativo': async (data, outputDir) => {
-    const naCriteria = computeNaCriteria(data.axe_results ?? data.axeResults ?? [], { includeExtended: false });
+
     const jsonPath = await writeJsonFile(outputDir, 'informe-narrativo.json', buildInformeNarrativoJson({
-      jobId: data.jobId, channel: data.channel, findings: data.findings, naCriteria, essentialFlows: data.essentialFlows
+      jobId: data.jobId, channel: data.channel, findings: data.findings, essentialFlows: data.essentialFlows,
+      axeResults: data.axe_results ?? data.axeResults ?? [], scores: data.scores
     }));
     const htmlPath = await writeTextFile(outputDir, 'informe-narrativo.html', buildInformeNarrativoHtml({
-      jobId: data.jobId, channel: data.channel, findings: data.findings, complementaryFindings: data.complementaryFindings, naCriteria, essentialFlows: data.essentialFlows, urls: data.urls, scores: data.scores
+      jobId: data.jobId, channel: data.channel, findings: data.findings, complementaryFindings: data.complementaryFindings, essentialFlows: data.essentialFlows, urls: data.urls, scores: data.scores, axeResults: data.axe_results ?? data.axeResults ?? []
     }));
     return [jsonPath, htmlPath];
   },
