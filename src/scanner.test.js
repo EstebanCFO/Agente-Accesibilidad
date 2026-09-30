@@ -148,3 +148,21 @@ test('scanUrl guarda rule_impacts de las reglas best-practice (axe no los trae e
     assert.ok(tags.includes('best-practice'), `"${id}" no es best-practice`);
   }
 });
+
+test('scanUrl con captureKeyboard agrega el recorrido de teclado y la hoja de contactos', async () => {
+  const { pathToFileURL } = await import('node:url');
+  const pathMod = await import('node:path');
+  const url = pathToFileURL(pathMod.resolve('tests/fixtures/keyboard/orden-ok.html')).href;
+  const result = await scanUrl({ url, captureKeyboard: true, waitFor: 'load' });
+  assert.deepEqual(result.keyboard.stops.map((s) => s.name), ['Primero', 'Segundo', 'Tercero']);
+  assert.equal(result.keyboard.ended, 'ciclo');
+  assert.ok(result.keyboard.contact_sheet.startsWith('/9j/'));
+  assert.ok(result.keyboard.stops.every((s) => !('focused_png' in s) && !('unfocused_png' in s)), 'los recortes no viajan en el resultado');
+});
+
+test('scanUrl sin captureKeyboard no recorre con teclado', async () => {
+  const { pathToFileURL } = await import('node:url');
+  const pathMod = await import('node:path');
+  const result = await scanUrl({ url: pathToFileURL(pathMod.resolve('tests/fixtures/keyboard/orden-ok.html')).href, waitFor: 'load' });
+  assert.equal(result.keyboard, undefined);
+});
