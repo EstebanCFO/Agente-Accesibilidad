@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createToolRegistry } from './tool-registry.js';
 import { JobStore } from '../job-store.js';
+import { calculateScore } from '../classification/calculate-score.js';
 
 const CORE_TOOL_NAMES = [
   'validate_config', 'crawl_site', 'validate_url_list', 'scan_url', 'scan_batch',
@@ -111,14 +112,10 @@ test('consolidate_jobs agrega 2 jobs completed en un dashboard consolidado', asy
   jobStore.createJob({ job_id: 'job-ios', target: { channel: 'app_ios', mode: 'url_list', urls: ['https://x.test'] }, output: { path: outputPath } });
   const registry = createToolRegistry({ jobStore });
 
-  const scoresHb = {
-    summary: { total_urls_evaluated: 10, onti_criteria_evaluated: 38, onti_criteria_compliant: 38, onti_compliance_percentage: 100, onti_conformance: true, conformance_threshold: 30, score_level_a: 100, score_level_aa: 100 },
-    extended_22: null, by_url: []
-  };
-  const scoresIos = {
-    summary: { total_urls_evaluated: 5, onti_criteria_evaluated: 38, onti_criteria_compliant: 20, onti_compliance_percentage: 52.63, onti_conformance: false, conformance_threshold: 30, score_level_a: 60, score_level_aa: 30 },
-    extended_22: null, by_url: []
-  };
+  const page = (url, passes) => ({ url, violations: [], incomplete: [], passes, inapplicable: [] });
+  const nok = { source: 'axe-core', wcag_criterion: '1.4.3', in_scope: 'onti', review_status: 'confirmado', affected_urls: ['https://x.test'] };
+  const scoresHb = calculateScore([], { axeResults: [page('https://x.test', [{ id: 'color-contrast', tags: ['wcag2aa', 'wcag143'] }])] });
+  const scoresIos = calculateScore([nok], { axeResults: [page('https://x.test', [])] });
 
   await registry.execute('generate_deliverable', { type: 'score', data: { scores: scoresHb } }, 'job-hb');
   await registry.execute('generate_deliverable', { type: 'score', data: { scores: scoresIos } }, 'job-ios');
@@ -129,9 +126,9 @@ test('consolidate_jobs agrega 2 jobs completed en un dashboard consolidado', asy
 
   assert.equal(result.channels.length, 2);
   assert.equal(result.global.channels_total, 2);
-  assert.equal(result.global.channels_conformant, 1);
-  const expected = Math.round(((100 * 10 + 52.63 * 5) / 15) * 100) / 100;
-  assert.equal(result.global.weighted_onti_compliance_percentage, expected);
+  assert.equal(result.global.channels_con_nok, 1);
+  assert.equal(result.global.nok, 1);
+  assert.equal(result.channels[0].ok, 1);
 
   const consolidatedHtml = await readFile(path.join(outputPath, 'consolidated', 'dashboard-consolidado.html'), 'utf8');
   assert.match(consolidatedHtml, /Dashboard Ejecutivo Consolidado/);
