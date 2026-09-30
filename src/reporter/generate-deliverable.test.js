@@ -40,7 +40,7 @@ test('generateDeliverable("score") escribe score-compliance.json con el envelope
   assert.deepEqual(doc.by_module, SAMPLE_SCORES.by_module);
 });
 
-test('generateDeliverable("inventario") escribe json + xlsx con las 4 hojas', async () => {
+test('generateDeliverable("inventario") escribe json + html + xlsx con las 4 hojas', async () => {
   const outputDir = await mkdtemp(path.join(tmpdir(), 'f1-deliverable-'));
   const findings = [
     {
@@ -53,9 +53,12 @@ test('generateDeliverable("inventario") escribe json + xlsx con las 4 hojas', as
 
   const filePaths = await generateDeliverable('inventario', { jobId: 'job-9', findings }, { outputDir });
 
-  assert.equal(filePaths.length, 2);
+  assert.equal(filePaths.length, 3);
   const jsonPath = filePaths.find((p) => p.endsWith('.json'));
   const xlsxPath = filePaths.find((p) => p.endsWith('.xlsx'));
+  const htmlPath = filePaths.find((p) => p.endsWith('.html'));
+  assert.equal(path.basename(htmlPath), 'inventario-hallazgos.html');
+  assert.match(await readFile(htmlPath, 'utf8'), /Inventario de hallazgos/);
 
   const jsonDoc = JSON.parse(await readFile(jsonPath, 'utf8'));
   assert.equal(jsonDoc.job_id, 'job-9');
@@ -96,7 +99,7 @@ test('generateDeliverable("roadmap") escribe json + html + xlsx priorizados', as
   assert.match(html, /Quick win regulatorio/);
 });
 
-test('generateDeliverable("matriz") escribe json + html + xlsx con las dos vistas', async () => {
+test('generateDeliverable("matriz") escribe json + html + xlsx con la vista por página', async () => {
   const outputDir = await mkdtemp(path.join(tmpdir(), 'f1-deliverable-'));
   const findings = [
     {
@@ -120,18 +123,15 @@ test('generateDeliverable("matriz") escribe json + html + xlsx con las dos vista
   assert.equal(criterio111.cells['https://a.test'], 'no_conforme');
   assert.equal(criterio111.cells['https://b.test'], 'conforme');
   assert.equal(jsonDoc.severity_impact_grid.length, 12);
-  // https://a.test y https://b.test no tienen path -> ambas caen en el módulo 'raiz'.
-  assert.deepEqual(jsonDoc.module_conformity_matrix.modules, ['raiz']);
-  assert.equal(jsonDoc.module_conformity_matrix.rows.length, 38);
-  assert.equal(jsonDoc.module_conformity_matrix.rows.find((r) => r.wcag_criterion === '1.1.1').cells.raiz, 'no_conforme');
+  assert.equal(jsonDoc.module_conformity_matrix, null);
 
   const html = await readFile(htmlPath, 'utf8');
-  assert.match(html, /Matriz de Criticidad/);
-  assert.match(html, /por módulo/i);
+  assert.match(html, /Matriz de criticidad WCAG 2\.0 AA/);
+  assert.match(html, /Conformidad de cada criterio en cada página/);
 
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(xlsxPath);
-  assert.deepEqual(workbook.worksheets.map((ws) => ws.name), ['Conformidad por módulo', 'Conformidad', 'Severidad x Impacto']);
+  assert.deepEqual(workbook.worksheets.map((ws) => ws.name), ['Conformidad por página', 'Severidad x Impacto']);
 });
 
 test('generateDeliverable("matriz") marca no_aplica cuando se pasan axe_results con un criterio N/A', async () => {
@@ -199,14 +199,26 @@ test('generateDeliverable("dashboard") escribe dashboard.html con las secciones 
 
   assert.equal(filePaths.length, 1);
   const html = await readFile(filePaths[0], 'utf8');
-  assert.match(html, /Dashboard Ejecutivo/);
-  assert.match(html, /NO CONFORME/);
+  assert.match(html, /Score de cumplimiento inicial/);
+  assert.match(html, /0 OK · 1 NOK/);
+  assert.doesNotMatch(html, /CONFORME/);
   assert.match(html, /Capa extendida WCAG 2\.2/);
   assert.match(html, /Cumplimiento de los 38 criterios WCAG — Circular BCRA/);
   assert.match(html, /Cumplimiento por Principio y Pauta WCAG/);
-  assert.match(html, /Distribución por módulo/);
-  assert.match(html, /home-banking/);
-  assert.match(html, /No disponible — los skills externos/);
+  assert.match(html, /Resultado por página/);
+  assert.match(html, /\/home-banking\/pago/);
+  assert.match(html, /No se ejecutó la revisión visual/);
+});
+
+test('generateDeliverable("dashboard") usa axe_results: sección WCAG y anexo de reglas por página', async () => {
+  const outputDir = await mkdtemp(path.join(tmpdir(), 'f1-deliverable-'));
+  const axeResults = [{ url: 'https://a.test/', violations: [], incomplete: [],
+    passes: [{ id: 'html-has-lang', tags: ['wcag2a', 'wcag311'] }], inapplicable: [] }];
+  const scores = { summary: { total_urls_evaluated: 1 }, extended_22: null, by_url: [], by_module: [] };
+  const [file] = await generateDeliverable('dashboard', { jobId: 'job-6', channel: 'home_banking', scores, findings: [], axeResults }, { outputDir });
+  const html = await readFile(file, 'utf8');
+  assert.match(html, /1 OK · 0 NOK/);
+  assert.match(html, /Reglas evaluadas por página/);
 });
 
 test('generateDeliverable("dashboard-consolidado") escribe score-consolidado.json + dashboard-consolidado.html', async () => {
@@ -258,7 +270,7 @@ test('generateDeliverable("informe-narrativo") escribe json + html con los 38 cr
 
   const html = await readFile(htmlPath, 'utf8');
   assert.match(html, /Informe Narrativo de Accesibilidad/);
-  assert.match(html, /Resumen final/);
+  assert.match(html, /Informe general/);
 });
 
 test('generateDeliverable("informe-narrativo") marca no_aplica en el JSON cuando se pasan axe_results con un criterio N/A', async () => {
@@ -289,4 +301,25 @@ test('generateDeliverable requiere outputDir', async () => {
     () => generateDeliverable('score', { jobId: 'x', scores: SAMPLE_SCORES }, {}),
     /requiere "outputDir"/
   );
+});
+
+test('generateDeliverable: los hallazgos del Agente (visual/UX) no entran en los informes, solo como complementarios', async () => {
+  const outputDir = await mkdtemp(path.join(tmpdir(), 'complementario-'));
+  const axe = { id: 'x1', wcag_criterion: '1.1.1', wcag_level: 'A', wcag_description: 'Contenido no textual', in_scope: 'onti', severity: 'critical', source: 'axe-core', affected_urls: ['https://a.test'], occurrences: 1, rule_id: 'image-alt', review_status: 'confirmado' };
+  const agente = { id: 'v1', wcag_criterion: '1.4.3', wcag_level: 'AA', wcag_description: 'Contraste', in_scope: 'onti', severity: 'serious', source: 'visual_audit', affected_urls: ['https://a.test'], occurrences: 1, failure_summary: 'Texto gris claro', remediation_hint: 'Oscurecer', rule_id: 'visual_audit:texto-gris' };
+
+  const [jsonPath] = await generateDeliverable('inventario', { jobId: 'job-1', findings: [axe, agente] }, { outputDir });
+  const inventario = JSON.parse(await readFile(jsonPath, 'utf8'));
+  assert.deepEqual(inventario.findings.map((f) => f.id), ['x1']);
+  assert.deepEqual(inventario.complementary_findings.map((f) => f.id), ['v1']);
+
+  const [, htmlPath] = await generateDeliverable('roadmap', { jobId: 'job-1', channel: 'home_banking', findings: [axe, agente], ontiCriteriaCompliant: 37, conformanceThreshold: 30 }, { outputDir });
+  const roadmapHtml = await readFile(htmlPath, 'utf8');
+  assert.match(roadmapHtml, /1\.1\.1/);
+  assert.doesNotMatch(roadmapHtml, /1\.4\.3/);
+
+  const [, narrativoHtmlPath] = await generateDeliverable('informe-narrativo', { jobId: 'job-1', channel: 'home_banking', findings: [axe, agente] }, { outputDir });
+  const narrativo = await readFile(narrativoHtmlPath, 'utf8');
+  assert.match(narrativo, /Análisis complementario del Agente/);
+  assert.match(narrativo, /Texto gris claro/);
 });

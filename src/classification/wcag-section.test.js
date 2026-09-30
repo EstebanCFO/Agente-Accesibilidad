@@ -116,3 +116,8 @@ test('reason: No aplica explica que no hay audio ni video', () => {
   });
   assert.deepEqual(reasonOf(section, '1.2.1'), { code: 'sin_multimedia', text: 'No se encontró audio ni video en la página evaluada' });
 });
+
+test('computeWcagSection: un finding sin review_status (datos viejos) cuenta como confirmado', () => {
+  const section = computeWcagSection([{ wcag_criterion: '1.1.1', in_scope: 'onti' }], { axeResults: [page('https://a.test')] });
+  assert.equal(statusOf(section, '1.1.1'), 'nok');
+});

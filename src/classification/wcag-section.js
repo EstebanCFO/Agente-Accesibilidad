@@ -39,11 +39,12 @@ function reasonFor(status, id, { pagesAffected, pagesScanned, incomplete }) {
  */
 export function computeWcagSection(findings, { axeResults = [], includeExtended = false } = {}) {
   const axeFindings = (findings || []).filter(isAxeFinding);
-  const confirmed = new Set(axeFindings.filter((f) => f.review_status === 'confirmado').map((f) => f.wcag_criterion));
+  const isConfirmed = (f) => (f.review_status ?? 'confirmado') === 'confirmado';
+  const confirmed = new Set(axeFindings.filter(isConfirmed).map((f) => f.wcag_criterion));
   const toReview = new Set(axeFindings.filter((f) => f.review_status === 'requiere_revision').map((f) => f.wcag_criterion));
 
   const pagesByCriterion = new Map();
-  for (const f of axeFindings.filter((x) => x.review_status === 'confirmado')) {
+  for (const f of axeFindings.filter(isConfirmed)) {
     if (!pagesByCriterion.has(f.wcag_criterion)) pagesByCriterion.set(f.wcag_criterion, new Set());
     for (const url of f.affected_urls || []) pagesByCriterion.get(f.wcag_criterion).add(url);
   }

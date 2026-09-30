@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildInformeNarrativo, buildInformeNarrativoJson, buildInformeNarrativoHtml } from './informe-narrativo-deliverable.js';
+import { criteriaWithoutAutomatedRules } from './report-helpers.js';
+const SIN_REGLAS = new Set(criteriaWithoutAutomatedRules().missing);
+
 
 function finding(overrides) {
   return {
@@ -27,9 +30,9 @@ test('buildInformeNarrativo devuelve los 38 criterios ordenados numéricamente p
   }
 });
 
-test('buildInformeNarrativo: sin findings, todos los criterios quedan "Cumple" con "Sin hallazgos"', () => {
+test('buildInformeNarrativo: sin findings, los criterios verificables quedan "Cumple" y los sin reglas "No evaluado"', () => {
   const { criterios } = buildInformeNarrativo({ findings: [] });
-  assert.ok(criterios.every((c) => c.estado === 'Cumple'));
+  assert.ok(criterios.every((c) => c.estado === (SIN_REGLAS.has(c.criterio) ? 'No evaluado' : 'Cumple')));
   assert.deepEqual(criterios[0].hallazgos, [{ descripcion: 'Sin hallazgos', herramientas: [], elementos_afectados: [], impacto_flujo: null }]);
 });
 
@@ -61,7 +64,7 @@ test('buildInformeNarrativo: hallazgos mapea descripcion/herramientas/elementos 
   const { criterios } = buildInformeNarrativo({ findings: [finding({ source: 'visual_audit' })] });
   const hallazgo = criterios.find((c) => c.criterio === '1.1.1').hallazgos[0];
   assert.equal(hallazgo.descripcion, 'Falta alt');
-  assert.deepEqual(hallazgo.herramientas, ['IA (revisión visual)']);
+  assert.deepEqual(hallazgo.herramientas, ['Revisión visual agéntica']);
   assert.deepEqual(hallazgo.elementos_afectados, ['<img>']);
   assert.match(hallazgo.impacto_flujo, /No determinado/);
 });
@@ -74,7 +77,8 @@ test('buildInformeNarrativo: resumen cuenta por estado y prioriza Crítico+Alto'
   const { resumen } = buildInformeNarrativo({ findings });
   assert.equal(resumen.conteo_por_estado['Crítico'], 1);
   assert.equal(resumen.conteo_por_estado['Alto'], 1);
-  assert.equal(resumen.conteo_por_estado['Cumple'], 36);
+  assert.equal(resumen.conteo_por_estado['Cumple'], 36 - [...SIN_REGLAS].filter((c) => !['1.1.1', '2.4.4'].includes(c)).length);
+  assert.equal(resumen.conteo_por_estado['No evaluado'] ?? 0, [...SIN_REGLAS].filter((c) => !['1.1.1', '2.4.4'].includes(c)).length);
   assert.equal(resumen.hallazgos_prioritarios.length, 2);
   assert.match(resumen.recomendacion_general, /1 criterio/);
 });
@@ -113,5 +117,16 @@ test('buildInformeNarrativoHtml escapa HTML y documenta la exclusión de Lightho
   assert.match(html, /WAVE/);
   assert.match(html, /Accessibility Insights/);
   assert.match(html, /ARC Toolkit/);
-  assert.match(html, /Resumen final/);
+  assert.match(html, /Informe general/);
+  assert.match(html, /Anexo — Detalle por criterio/);
+});
+
+test('buildInformeNarrativoHtml resume con OK/NOK/a validar, sin veredicto ni umbral', async () => {
+  const { buildInformeNarrativoHtml } = await import('./informe-narrativo-deliverable.js');
+  const { calculateScore } = await import('../classification/calculate-score.js');
+  const findings = [{ id: 'f', source: 'axe-core', wcag_criterion: '1.1.1', wcag_level: 'A', wcag_description: 'Contenido no textual', in_scope: 'onti', severity: 'critical', review_status: 'confirmado', affected_urls: ['https://a.test'], occurrences: 1, rule_id: 'image-alt' }];
+  const html = buildInformeNarrativoHtml({ jobId: 'j', channel: 'home_banking', findings, urls: ['https://a.test'], scores: calculateScore(findings) });
+  assert.match(html, /0 OK, 1 NOK y 37 a validar \(de 38\)/);
+  assert.doesNotMatch(html, /CONFORME/);
+  assert.doesNotMatch(html, /umbral regulatorio/i);
 });
