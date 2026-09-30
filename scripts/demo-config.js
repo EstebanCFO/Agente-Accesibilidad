@@ -55,8 +55,7 @@ export function buildConfigFields(values = {}) {
     // Siempre activo: es la base normativa del puntaje (38 criterios WCAG 2.0 A+AA). Se muestra
     // para que quede explícito qué se evalúa; no se puede desmarcar.
     { name: 'wcagBase', type: 'checkbox', label: 'Evaluar estándares internacionales WCAG 2.0 (niveles A, AA)', value: true, locked: true },
-    { name: 'visualAudit', type: 'checkbox', label: 'Revisión visual del Agente (contraste, espaciado, tamaño de botones y texto, foco visible, animaciones)', value: v.visualAudit },
-    { name: 'uxReview', type: 'checkbox', label: 'Revisión de UX con Agente (formularios, mensajes de error, etiquetas y coherencia de navegación)', value: v.uxReview },
+    { name: 'keyboardReview', type: 'checkbox', label: 'Pruebas de teclado del Agente (trampas de teclado, orden y visibilidad del foco, cambios al recibir el foco)', value: v.keyboardReview },
     { name: 'includeExtended', type: 'checkbox', label: 'Sumar WCAG 2.2 (score aparte)', value: v.includeExtended },
     { name: 'authUser', type: 'text', label: 'Usuario de prueba', value: v.authUser, placeholder: 'Opcional', autocomplete: 'off', showIf: withAuth },
     { name: 'authPassword', type: 'password', label: 'Contraseña', value: '', placeholder: 'Solo si hay usuario', autocomplete: 'off', showIf: withAuth }
@@ -66,7 +65,7 @@ export function buildConfigFields(values = {}) {
 export function defaultConfigValues() {
   return {
     source: 'reference', referenceSite: '1', targetUrl: '', targetPath: '', channel: 'home_banking',
-    maxPages: DEFAULT_MAX_PAGES, selectedPages: [], visualAudit: true, uxReview: true, includeExtended: false,
+    maxPages: DEFAULT_MAX_PAGES, selectedPages: [], keyboardReview: true, includeExtended: false,
     authUser: '', authPassword: ''
   };
 }
@@ -136,8 +135,7 @@ export function validateDemoConfig(raw = {}) {
       maxPages,
       selectedPages,
       includeExtended,
-      visualAudit: asBool(values.visualAudit),
-      uxReview: asBool(values.uxReview),
+      keyboardReview: asBool(values.keyboardReview),
       wcagTags: includeExtended ? [...BASE_WCAG_TAGS, ...EXTENDED_WCAG_TAGS] : [...BASE_WCAG_TAGS],
       viewport: channel === 'home_banking' ? DESKTOP_VIEWPORT : MOBILE_VIEWPORT,
       auth: authUser ? { type: 'basic', config: { username: authUser, password: authPassword } } : null
@@ -157,14 +155,13 @@ function pagesSummary(config) {
 
 export function buildConfigSummary(config) {
   const sourceLabel = SOURCES.find((s) => s.value === config.source)?.label ?? config.source;
-  const ia = [config.visualAudit && 'visual', config.uxReview && 'UX'].filter(Boolean);
   // Solo se resume lo que el presentador eligió: el canal ya no se elige y el usuario de
   // prueba no existe para sitio de referencia.
   const rows = [
     { label: 'Qué auditar', value: `${sourceLabel}: ${config.target}` },
     { label: 'Páginas', value: pagesSummary(config) },
     { label: 'Normativa', value: config.includeExtended ? 'ONTI 38 criterios + WCAG 2.2 (aparte)' : 'ONTI 38 criterios (WCAG 2.0 A+AA)' },
-    { label: 'Revisión del Agente', value: ia.length > 0 ? ia.join(' y ') : 'no' }
+    { label: 'Pruebas de teclado del Agente', value: config.keyboardReview ? 'sí' : 'no' }
   ];
   if (config.source !== 'reference') rows.push({ label: 'Usuario de prueba', value: config.auth ? config.auth.config.username : 'no' });
   return rows;

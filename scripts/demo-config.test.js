@@ -102,9 +102,19 @@ test('validateDemoConfig ignora el usuario de prueba con sitio de referencia', (
 });
 
 test('validateDemoConfig interpreta checkboxes desmarcados como false', () => {
-  const { config } = validateDemoConfig({ visualAudit: false, uxReview: 'false' });
-  assert.equal(config.visualAudit, false);
-  assert.equal(config.uxReview, false);
+  const { config } = validateDemoConfig({ keyboardReview: 'false' });
+  assert.equal(config.keyboardReview, false);
+});
+
+test('las pruebas de teclado del Agente reemplazan a las revisiones visual y de UX', () => {
+  const fields = Object.fromEntries(buildConfigFields().map((f) => [f.name, f]));
+  assert.equal(fields.keyboardReview.type, 'checkbox');
+  assert.match(fields.keyboardReview.label, /Pruebas de teclado del Agente/);
+  assert.equal(fields.visualAudit, undefined);
+  assert.equal(fields.uxReview, undefined);
+  assert.equal(validateDemoConfig(defaultConfigValues()).config.keyboardReview, true);
+  const summary = buildConfigSummary(validateDemoConfig(defaultConfigValues()).config);
+  assert.deepEqual(summary.find((r) => r.label === 'Pruebas de teclado del Agente'), { label: 'Pruebas de teclado del Agente', value: 'sí' });
 });
 
 test('buildConfigSummary nunca expone la contraseña', () => {

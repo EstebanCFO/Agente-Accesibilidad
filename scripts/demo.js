@@ -15,13 +15,13 @@ crawleeLog.setLevel(LogLevel.OFF);
 import { classifyFindings } from '../src/classification/classify-findings.js';
 import { calculateScore } from '../src/classification/calculate-score.js';
 import { summarizeRuleChecks } from '../src/classification/rule-checks.js';
-import { runVisualAudit, detectImageMediaType } from '../src/visual-review/visual-audit.js';
-import { runUxComplianceReview } from '../src/visual-review/ux-compliance-review.js';
+import { runKeyboardReview } from '../src/keyboard/keyboard-review.js';
+import { buildKeyboardCriteria, computeKeyboardScore, KEYBOARD_CRITERIA } from '../src/keyboard/keyboard-criteria.js';
 import { generateDeliverable } from '../src/reporter/generate-deliverable.js';
-import { emptyUsage, addUsage, totalTokens, resolvePricing, estimateCostUsd, PRICING_SOURCE_DATE } from '../src/visual-review/usage-cost.js';
+import { emptyUsage, addUsage, totalTokens, resolvePricing, estimateCostUsd, PRICING_SOURCE_DATE } from '../src/ai/usage-cost.js';
 import { resolveSelectedPages } from './demo-page-selection.js';
 import { buildConfigFields, buildConfigSummary, defaultConfigValues, validateDemoConfig, previewTarget, MAX_PAGES_LIMIT } from './demo-config.js';
-import { countViolationsByImpact, isWcagViolation, buildWcagCard, buildBestPracticesCard, formatPageChecks, buildSeverityCard, buildAiCard, buildUsageCard } from './demo-results.js';
+import { countViolationsByImpact, isWcagViolation, buildWcagCard, buildBestPracticesCard, formatPageChecks, buildSeverityCard, buildKeyboardCard, buildUsageCard } from './demo-results.js';
 import { runWithConcurrency } from './demo-concurrency.js';
 import { buildReportViewerHtml } from './demo-report-viewer.js';
 import { isLocalPath, listHtmlFiles, toFileUrl } from './demo-local-source.js';
@@ -32,7 +32,7 @@ import { createDemoServer, DemoCancelledError } from './demo-server.js';
 /**
  * Demo guionada para audiencia C-level: pasos fijos y controlados por el presentador (no el
  * loop autónomo del agente, que decide su propio flujo - acá queremos previsibilidad). El
- * control (configuración, selección de páginas y avance de los 6 pasos) es el panel web; esta
+ * control (configuración, selección de páginas y avance de los 5 pasos) es el panel web; esta
  * función solo imprime el banner en la terminal como respaldo/debug.
  */
 function header(n, title) {
@@ -188,74 +188,73 @@ const AI_CONCURRENCY = Number(process.env.AI_CONCURRENCY) || 4;
 const AI_MODEL = process.env.AI_MODEL || 'claude-sonnet-5';
 
 /**
- * Lanza en paralelo todas las revisiones con IA habilitadas (visual y UX por página), acumula
- * hallazgos y consumo de tokens, y actualiza las tarjetas del panel a medida que terminan.
+ * Pruebas de teclado del Agente: el recorrido con Tab ya se hizo durante el escaneo; acá se lanza
+ * en paralelo la interpretación con IA (una consulta por página), se arma el resultado de los 4
+ * criterios por página (si la IA falla, con las reglas solas) y se actualizan las tarjetas.
  */
-function startAiReviews(ui, axeResults, config, anthropicClient) {
+function startKeyboardReviews(ui, axeResults, config, anthropicClient) {
   const pricing = resolvePricing(AI_MODEL, process.env);
-  const state = { visualFindings: [], uxFindings: [], usage: emptyUsage(), attempts: 0, failures: 0, byKind: { visual: [], ux: [] },
-    visualDone: new Map(), visualListeners: [] };
+  const state = { results: new Map(), usage: emptyUsage(), pending: 0, listeners: [], done: [] };
+  const withKeyboard = config.keyboardReview ? axeResults.filter((r) => r.keyboard) : [];
   const refreshCards = () => {
-    ui.pushResult(buildAiCard(state.visualFindings.length, state.uxFindings.length, { unavailable: state.attempts > 0 && state.failures === state.attempts }));
-    ui.pushResult(buildUsageCard(state.usage, estimateCostUsd(state.usage, pricing)));
+    if (withKeyboard.length === 0) return;
+    ui.pushResult(buildKeyboardCard(computeKeyboardScore([...state.results.values()]), { pending: state.pending }));
+    if (state.usage.calls > 0) ui.pushResult(buildUsageCard(state.usage, estimateCostUsd(state.usage, pricing)));
   };
-  const options = { anthropicClient, model: AI_MODEL, includeExtended: config.includeExtended };
+  const setResult = (url, criteria, status) => {
+    state.results.set(url, { url, criteria, status });
+    state.listeners.forEach((fn) => fn());
+  };
 
   const specs = [];
-  for (const r of axeResults) {
-    if (config.visualAudit && r.screenshot) specs.push({ kind: 'visual', url: r.url, run: () => runVisualAudit({ url: r.url, screenshot: r.screenshot }, options) });
-    if (config.uxReview && r.html) specs.push({ kind: 'ux', url: r.url, run: () => runUxComplianceReview({ url: r.url, html: r.html }, options) });
+  for (const r of withKeyboard) {
+    const kb = r.keyboard;
+    if (kb.error || kb.stops.length === 0 || !kb.contact_sheet) {
+      setResult(r.url, buildKeyboardCriteria(kb.error ? null : kb, { error: kb.error }), 'done');
+    } else {
+      specs.push({ url: r.url, keyboard: kb, run: () => runKeyboardReview({ url: r.url, keyboard: kb }, { anthropicClient, model: AI_MODEL }) });
+    }
   }
-  if (specs.length > 0) ui.pushLog(`Revisión del Agente iniciada en segundo plano: ${specs.length} consulta(s), hasta ${AI_CONCURRENCY} a la vez.`);
+  state.pending = specs.length;
+  if (specs.length > 0) ui.pushLog(`Pruebas de teclado: el Agente interpreta ${specs.length} recorrido(s) en segundo plano, hasta ${AI_CONCURRENCY} a la vez.`);
+  refreshCards();
 
   const promises = runWithConcurrency(specs.map((spec) => spec.run), AI_CONCURRENCY);
   specs.forEach((spec, i) => {
-    state.attempts += 1;
-    const done = promises[i].then(({ ok, value, error }) => {
-      const label = spec.kind === 'visual' ? 'visual' : 'de UX';
+    state.done.push(promises[i].then(({ ok, value, error }) => {
+      state.pending -= 1;
       if (ok) {
-        const found = spec.kind === 'visual' ? value.visual_findings : value.ux_findings;
-        (spec.kind === 'visual' ? state.visualFindings : state.uxFindings).push(...found);
         state.usage = addUsage(state.usage, value.usage);
-        const saved = value.html_chars && value.html_chars.original > 0
-          ? ` (HTML reducido ${Math.round((1 - value.html_chars.sent / value.html_chars.original) * 100)}%)` : '';
-        ui.pushLog(`${shortUrl(spec.url)}: ${found.length} hallazgo(s) ${label}${saved}.`, 'ok');
+        setResult(spec.url, buildKeyboardCriteria(spec.keyboard, { ai: value.review }), 'done');
       } else {
-        state.failures += 1;
-        ui.pushLog(`Revisión ${label} no disponible para ${shortUrl(spec.url)}: ${friendlyError(error)}. Se sigue sin ella.`, 'warn');
+        ui.pushLog(`Interpretación del Agente no disponible para ${shortUrl(spec.url)}: ${friendlyError(error)}. Se usan las reglas automáticas.`, 'warn');
+        setResult(spec.url, buildKeyboardCriteria(spec.keyboard, { aiFailed: true }), 'failed');
       }
-      if (spec.kind === 'visual') {
-        state.visualDone.set(spec.url, ok ? 'done' : 'failed');
-        state.visualListeners.forEach((fn) => fn());
-      }
+      const con = KEYBOARD_CRITERIA.filter((c) => state.results.get(spec.url).criteria[c.id].estado === 'con_indicios').length;
+      ui.pushLog(`${shortUrl(spec.url)}: teclado — ${con} de ${KEYBOARD_CRITERIA.length} criterios con indicios.`, con ? 'warn' : 'ok');
       refreshCards();
-    });
-    state.byKind[spec.kind].push(done);
+    }));
   });
 
   return {
-    get visualFindings() { return state.visualFindings; },
-    get uxFindings() { return state.uxFindings; },
-    /** Estado de la revisión visual de una página: 'pending', 'done', 'failed' o 'none' (sin captura). */
-    visualStatus(url) {
-      if (!specs.some((sp) => sp.kind === 'visual' && sp.url === url)) return 'none';
-      return state.visualDone.get(url) ?? 'pending';
+    /** Resultados por página, en el orden del escaneo. */
+    results() { return axeResults.map((r) => state.results.get(r.url)).filter(Boolean); },
+    status(url) { return state.results.get(url)?.status ?? 'pending'; },
+    notes(url) {
+      const result = state.results.get(url);
+      if (!result) return [];
+      return KEYBOARD_CRITERIA
+        .filter((c) => result.criteria[c.id].estado !== 'sin_indicios')
+        .map((c) => ({ text: result.criteria[c.id].motivo, criterion: `${c.id} ${c.label}` }));
     },
-    visualNotes(url) {
-      return state.visualFindings
-        .filter((f) => (f.affected_urls || []).includes(url))
-        .map((f) => ({ text: f.failure_summary || f.wcag_description, criterion: `${f.wcag_criterion} ${f.wcag_description ?? ''}`.trim() }));
-    },
-    onVisualProgress(listener) { state.visualListeners.push(listener); },
-    /** Espera las revisiones de un tipo mostrando cuántas van terminadas. */
-    async waitFor(kind, label) {
-      const list = state.byKind[kind];
+    onProgress(listener) { state.listeners.push(listener); },
+    async waitAll(label) {
       let finished = 0;
-      const show = () => ui.pushProgress(label, finished, list.length);
-      list.forEach((p) => p.then(() => { finished += 1; show(); }));
+      const show = () => ui.pushProgress(label, finished, state.done.length);
+      state.done.forEach((p) => p.then(() => { finished += 1; show(); }));
       await Promise.resolve();
       show();
-      await Promise.all(list);
+      await Promise.all(state.done);
       ui.throwIfCancelled();
     },
     usageReport() {
@@ -321,7 +320,7 @@ async function runDemo(ui, { stage }) {
     ui.goToStep(0);
     ui.pushStage({ type: 'clear' });
     ({ config, values: formValues } = await configure(ui, formValues));
-    ui.setSkipped([!config.visualAudit && 4, !config.uxReview && 5].filter(Boolean));
+    ui.setSkipped(config.keyboardReview ? [] : [4]);
     ui.goToStep(1, 'Relevar páginas');
     pagesToAudit = await discoverPages(ui, config);
     if (pagesToAudit) break;
@@ -345,7 +344,7 @@ async function runDemo(ui, { stage }) {
       // polling) nunca llegan a red inactiva y cuelgan el escaneo en una demo en vivo.
       const axeResult = await scanUrl({
         url, wcagTags: config.wcagTags, auth: config.auth, viewport: config.viewport,
-        captureScreenshot: config.visualAudit, captureHtml: config.uxReview, waitFor: 'load'
+        captureKeyboard: config.keyboardReview, waitFor: 'load'
       });
       axeResults.push(axeResult);
       // El log, la tarjeta y el resaltado cuentan solo WCAG (las buenas prácticas van en su propia sección).
@@ -368,10 +367,10 @@ async function runDemo(ui, { stage }) {
   if (axeResults.length < pagesToAudit.length * 0.8) {
     ui.pushLog(`Solo se escaneó ${axeResults.length} de ${pagesToAudit.length} páginas: el resultado es parcial.`, 'warn');
   }
-  // Las revisiones con IA arrancan YA, en segundo plano y en paralelo (hasta AI_CONCURRENCY a la
-  // vez): mientras el presentador comenta el escaneo y la clasificación, la IA ya está
-  // trabajando. Los pasos 4 y 5 después solo esperan lo que falte.
-  const ai = startAiReviews(ui, axeResults, config, anthropicClient);
+  // La interpretación del recorrido de teclado arranca YA, en segundo plano y en paralelo (hasta
+  // AI_CONCURRENCY a la vez): mientras el presentador comenta el escaneo y la clasificación, la IA
+  // ya está trabajando. El paso 4 después solo espera lo que falte.
+  const keyboard = startKeyboardReviews(ui, axeResults, config, anthropicClient);
   await gate(ui, `Escaneo terminado: ${axeResults.length} página(s) revisadas`, 'clasificar los hallazgos contra la normativa ONTI/BCRA.');
 
   // Paso 3: clasificar
@@ -384,46 +383,36 @@ async function runDemo(ui, { stage }) {
   const s = scores.wcag_section;
   ui.pushLog(`Compliance WCAG: ${s.ok} OK, ${s.nok} NOK, ${s.a_validar} a validar (de ${s.total}).`, s.nok ? 'warn' : 'ok');
 
-  const nextAfterClassify = config.visualAudit ? 'revisión visual del agente donde se analiza contraste, espaciado, tamaño de botones, tamaño y legibilidad del texto, visibilidad del foco y animaciones sin pausa.'
-    : config.uxReview ? 'revisión de experiencia de usuario agéntica.' : 'generar los informes.';
-  await gate(ui, 'Clasificación terminada', nextAfterClassify);
+  await gate(ui, 'Clasificación terminada', config.keyboardReview
+    ? 'pruebas de teclado del Agente: recorrido con Tab de cada página para detectar trampas de teclado, orden del foco, foco visible y cambios al recibir el foco.'
+    : 'generar los informes.');
 
-  // Pasos 4 y 5: esperar las revisiones con IA ya lanzadas (opcionales; si fallan, se sigue sin ellas).
-  if (config.visualAudit) {
-    ui.goToStep(4, 'Revisión visual del Agente');
-    // Se muestran las capturas que analiza el Agente, página por página, con sus observaciones.
-    const shots = axeResults.filter((r) => r.screenshot);
+  // Paso 4: pruebas de teclado (opcionales; si la IA falla, se usan las reglas automáticas).
+  if (config.keyboardReview) {
+    ui.goToStep(4, 'Pruebas de teclado del Agente');
+    // Hoja de contactos de cada página: cada parada del Tab con y sin foco, y lo que encontró el Agente.
+    const sheets = axeResults.filter((r) => r.keyboard?.contact_sheet);
     const showGallery = () => ui.pushStage({
       type: 'gallery',
-      caption: 'Capturas que analiza el Agente',
-      items: shots.map((r) => ({
-        src: `data:${detectImageMediaType(r.screenshot)};base64,${r.screenshot}`,
+      caption: 'Recorrido con Tab: cada parada sin foco y con foco',
+      items: sheets.map((r) => ({
+        src: `data:image/jpeg;base64,${r.keyboard.contact_sheet}`,
         caption: shortUrl(r.url),
-        status: ai.visualStatus(r.url),
-        notes: ai.visualNotes(r.url)
+        status: keyboard.status(r.url),
+        notes: keyboard.notes(r.url)
       }))
     });
-    if (shots.length > 0) {
+    if (sheets.length > 0) {
       showGallery();
-      ai.onVisualProgress(showGallery);
+      keyboard.onProgress(showGallery);
     }
-    await ai.waitFor('visual', 'El Agente revisa las capturas');
-    await gate(ui, 'Revisión visual terminada', config.uxReview ? 'revisión de experiencia de usuario agéntica.' : 'generar los informes.');
+    await keyboard.waitAll('El Agente interpreta los recorridos con teclado');
+    ui.pushLog('Las pruebas de teclado son complementarias: no modifican el compliance WCAG; los criterios 2.1.2, 2.4.3, 2.4.7 y 3.2.1 siguen "a validar".');
+    await gate(ui, 'Pruebas de teclado terminadas', 'generar los informes.');
   } else {
-    ui.pushLog('Revisión visual del Agente omitida por configuración.');
+    ui.pushLog('Pruebas de teclado del Agente omitidas por configuración.');
   }
-  if (config.uxReview) {
-    ui.goToStep(5, 'Revisión de UX con Agente');
-    await ai.waitFor('ux', 'El Agente revisa formularios y mensajes');
-    await gate(ui, 'Revisión de UX terminada', 'generar los informes.');
-  } else {
-    ui.pushLog('Revisión de UX con Agente omitida por configuración.');
-  }
-  const { visualFindings, uxFindings } = ai;
-  if (visualFindings.length + uxFindings.length > 0) {
-    ui.pushLog('La revisión del Agente es un análisis complementario: se muestra aparte en los informes y no modifica el puntaje, que se basa solo en axe-core.');
-  }
-  const usageReport = ai.usageReport();
+  const usageReport = keyboard.usageReport();
   await mkdir(outputDir, { recursive: true });
   await writeFile(path.join(outputDir, 'consumo-ia.json'), JSON.stringify(usageReport, null, 2));
   if (usageReport.calls > 0) {
@@ -431,15 +420,15 @@ async function runDemo(ui, { stage }) {
     ui.pushLog(`Consumo de IA: ${usageReport.total_tokens.toLocaleString('es-AR')} tokens en ${usageReport.calls} llamada(s), ${cost}.`, 'ok');
   }
 
-  // Paso 6: informes
-  ui.goToStep(6, 'Informes');
-  // Puntaje e informes: solo axe-core. La revisión del Agente va como análisis complementario.
-  const complementaryFindings = [...visualFindings, ...uxFindings];
+  // Paso 5: informes
+  ui.goToStep(5, 'Informes');
+  // Compliance e informes: solo axe-core. Las pruebas de teclado van como sección complementaria.
+  const keyboardResults = keyboard.results();
   const finalScores = calculateScore(findings, { axeResults, includeExtended: config.includeExtended });
   ui.pushResult(buildWcagCard(finalScores.wcag_section, { includeExtended: config.includeExtended }));
   ui.pushResult(buildBestPracticesCard(finalScores.best_practices));
   const data = {
-    jobId, channel: config.channel, scores: finalScores, findings, complementaryFindings, axeResults,
+    jobId, channel: config.channel, scores: finalScores, findings, keyboardResults, axeResults,
     urls: axeResults.map((r) => r.url), includeExtended: config.includeExtended,
     ontiCriteriaCompliant: finalScores.summary.onti_criteria_compliant,
     conformanceThreshold: finalScores.summary.effective_conformance_threshold ?? finalScores.summary.conformance_threshold
@@ -456,7 +445,7 @@ async function runDemo(ui, { stage }) {
     }
   }
   if (!generated.some((d) => d.type === 'dashboard')) throw new Error('No se pudo generar el score de cumplimiento inicial.');
-  ui.goToStep(7);
+  ui.goToStep(6);
   ui.pushLog(`Informes guardados en ${path.resolve(outputDir)}`, 'ok');
 
   // Una sola página con los informes embebidos: botones arriba, el informe elegido debajo.
@@ -480,7 +469,7 @@ async function runDemo(ui, { stage }) {
 
 async function main() {
   if (!process.env.ANTHROPIC_API_KEY) {
-    console.error('Falta ANTHROPIC_API_KEY en el entorno - la demo necesita llamar a Claude para los pasos 4 y 5.');
+    console.error('Falta ANTHROPIC_API_KEY en el entorno - la demo necesita llamar a Claude para interpretar las pruebas de teclado (paso 4).');
     process.exit(1);
   }
 

@@ -92,18 +92,19 @@ export function buildSeverityCard(counts, { includeExtended = false } = {}) {
 }
 
 /**
- * Tarjeta de hallazgos adicionales de la revisión con IA. unavailable: todas las llamadas a la IA
- * fallaron - se muestra "No disponible" en vez de un 0 que se leería como "sin problemas".
+ * Tarjeta de la Sección 3 (Pruebas de teclado del Agente): % de pares página×criterio sin indicios
+ * (ver computeKeyboardScore). Complementaria: no afecta el compliance WCAG ni las buenas prácticas.
  */
-export function buildAiCard(visualCount, uxCount, { unavailable = false } = {}) {
-  if (unavailable) {
-    return { key: 'ai', label: 'Hallazgos del Agente (complementario)', value: '—', detail: 'No disponible (ver actividad)', tone: 'warn' };
-  }
+export function buildKeyboardCard(k, { pending = 0 } = {}) {
+  const parts = [`${k.con_indicios} con indicios`, `${k.sin_indicios} sin indicios`];
+  if (k.no_evaluable) parts.push(`${k.no_evaluable} no evaluables`);
+  if (pending) parts.push(`${pending} página(s) en curso`);
   return {
-    key: 'ai',
-    label: 'Hallazgos del Agente (complementario)',
-    value: String(visualCount + uxCount),
-    detail: `${visualCount} visuales · ${uxCount} de UX`
+    key: 'keyboard',
+    label: 'Pruebas de teclado del Agente (complementario)',
+    value: k.score === null ? '—' : `${PCT.format(k.score)}%`,
+    detail: parts.join(' · '),
+    title: 'Recorrido con Tab en cada página: trampas de teclado (2.1.2), orden del foco (2.4.3), foco visible (2.4.7) y cambios al recibir el foco (3.2.1). "Con indicios" requiere validación humana.'
   };
 }
 

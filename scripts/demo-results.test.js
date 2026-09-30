@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { countViolationsByImpact, isWcagViolation, buildWcagCard, buildBestPracticesCard, formatPageChecks, buildScoreCard, buildSeverityCard, buildAiCard, buildUsageCard } from './demo-results.js';
+import { countViolationsByImpact, isWcagViolation, buildWcagCard, buildBestPracticesCard, formatPageChecks, buildScoreCard, buildSeverityCard, buildKeyboardCard, buildUsageCard } from './demo-results.js';
 
 test('countViolationsByImpact suma por severidad entre páginas e ignora impactos desconocidos', () => {
   const counts = countViolationsByImpact([
@@ -70,16 +70,6 @@ test('buildSeverityCard totaliza y desglosa', () => {
   assert.deepEqual(card.breakdown.map((b) => b.value), [1, 2, 3, 0]);
 });
 
-test('buildAiCard suma visuales y UX', () => {
-  assert.equal(buildAiCard(2, 3).value, '5');
-});
-
-test('buildAiCard muestra No disponible cuando la IA falló en todas las páginas', () => {
-  const card = buildAiCard(0, 0, { unavailable: true });
-  assert.equal(card.value, '—');
-  assert.match(card.detail, /No disponible/);
-});
-
 test('buildUsageCard muestra tokens totales, costo en US$ y cantidad de llamadas', () => {
   const card = buildUsageCard({ calls: 4, inputTokens: 10000, outputTokens: 2000, cacheWriteTokens: 1500, cacheReadTokens: 500 }, 0.0452);
   assert.equal(card.key, 'usage');
@@ -147,4 +137,22 @@ test('formatPageChecks usa singular con una sola regla o criterio', () => {
 test('las tarjetas usan singular cuando corresponde', () => {
   assert.equal(buildWcagCard({ total: 37, ok: 8, nok: 5, a_validar: 24, no_aplica: 1 }).detail, '24 a validar (de 37) · 1 no aplica');
   assert.equal(buildBestPracticesCard({ score: 50, cumple: 1, mejora: 1, no_aplica: 1 }).detail, '1 cumple · 1 a mejorar · 1 no aplica');
+});
+
+test('buildKeyboardCard muestra el puntaje y los conteos con/sin indicios', () => {
+  const card = buildKeyboardCard({ score: 75, sin_indicios: 12, con_indicios: 4, no_evaluable: 0 });
+  assert.equal(card.key, 'keyboard');
+  assert.equal(card.label, 'Pruebas de teclado del Agente (complementario)');
+  assert.equal(card.value, '75%');
+  assert.equal(card.detail, '4 con indicios · 12 sin indicios');
+});
+
+test('buildKeyboardCard aclara las no evaluables y muestra guion sin pares evaluables', () => {
+  assert.equal(buildKeyboardCard({ score: 50, sin_indicios: 1, con_indicios: 1, no_evaluable: 4 }).detail, '1 con indicios · 1 sin indicios · 4 no evaluables');
+  assert.equal(buildKeyboardCard({ score: null, sin_indicios: 0, con_indicios: 0, no_evaluable: 4 }).value, '—');
+});
+
+test('buildKeyboardCard indica En curso mientras falta alguna página', () => {
+  const card = buildKeyboardCard({ score: 100, sin_indicios: 4, con_indicios: 0, no_evaluable: 0 }, { pending: 2 });
+  assert.match(card.detail, /2 página\(s\) en curso/);
 });
