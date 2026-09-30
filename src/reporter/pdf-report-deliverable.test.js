@@ -61,3 +61,11 @@ test('generateDeliverable("informe-pdf") genera un PDF válido', { timeout: 6000
   assert.equal(bytes.subarray(0, 5).toString(), '%PDF-');
   assert.ok(bytes.length > 20000);
 });
+
+test('buildConsolidatedReportHtml: la metodología describe las pruebas de teclado, no la revisión visual/UX', () => {
+  const html = buildConsolidatedReportHtml({ ...data(), findings: [axe] });
+  // La metodología es la primera sección del PDF (antes del Score de cumplimiento).
+  const metodologia = html.slice(html.indexOf('<section class="pdf-section">'), html.indexOf('pdf-section sec-dashboard'));
+  assert.match(metodologia, /Pruebas de teclado del Agente/);
+  assert.doesNotMatch(metodologia, /revisión visual y de UX/);
+});
