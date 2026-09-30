@@ -39,20 +39,20 @@ test('computeWcagSection: criterio sin ninguna regla evaluada queda A validar y 
   assert.equal(section.a_validar, 38);
 });
 
-test('computeWcagSection: 1.2.1 solo inapplicable queda No aplica y sale del total', () => {
+test('computeWcagSection: sin audio ni video los criterios 1.2.x quedan A validar, nunca No aplica', () => {
   const section = computeWcagSection([], {
-    axeResults: [page('https://a.test', { inapplicable: [pass('audio-caption', ['wcag2a', 'wcag121'])] })]
+    axeResults: [page('https://a.test', { inapplicable: [pass('video-caption', ['wcag2a', 'wcag122'])] })]
   });
-  assert.equal(statusOf(section, '1.2.1'), 'no_aplica');
-  assert.equal(section.no_aplica, 1);
-  assert.equal(section.total, 37);
+  for (const c of ['1.2.1', '1.2.2', '1.2.3', '1.2.4', '1.2.5']) assert.equal(statusOf(section, c), 'a_validar', c);
+  assert.equal(section.no_aplica, 0);
+  assert.equal(section.total, 38);
 });
 
-test('computeWcagSection: un finding real impide No aplica aunque axe lo marque inapplicable', () => {
-  const section = computeWcagSection([finding('1.2.1', 'confirmado')], {
-    axeResults: [page('https://a.test', { inapplicable: [pass('audio-caption', ['wcag2a', 'wcag121'])] })]
+test('computeWcagSection: un finding real deja NOK un criterio multimedia aunque no se detecte video', () => {
+  const section = computeWcagSection([finding('1.2.2', 'confirmado')], {
+    axeResults: [page('https://a.test', { inapplicable: [pass('video-caption', ['wcag2a', 'wcag122'])] })]
   });
-  assert.equal(statusOf(section, '1.2.1'), 'nok');
+  assert.equal(statusOf(section, '1.2.2'), 'nok');
 });
 
 test('computeWcagSection: los hallazgos complementarios no cambian ningún estado', () => {
@@ -110,11 +110,20 @@ test('reason: criterio con reglas pero sin elementos en las páginas queda A val
   });
 });
 
-test('reason: No aplica explica que no hay audio ni video', () => {
+test('reason: sin audio ni video, todos los 1.2.x piden confirmarlo con el mismo motivo', () => {
   const section = computeWcagSection([], {
-    axeResults: [page('https://a.test', { inapplicable: [pass('audio-caption', ['wcag2a', 'wcag121'])] })]
+    axeResults: [page('https://a.test', { inapplicable: [pass('video-caption', ['wcag2a', 'wcag122'])] }), page('https://b.test')]
   });
-  assert.deepEqual(reasonOf(section, '1.2.1'), { code: 'sin_multimedia', text: 'No se encontró audio ni video en la página evaluada' });
+  const expected = { code: 'sin_multimedia', text: 'No se detectó audio ni video en las 2 páginas evaluadas: confirmar manualmente que el sitio no tiene contenido multimedia' };
+  for (const c of ['1.2.1', '1.2.2', '1.2.3', '1.2.4', '1.2.5']) assert.deepEqual(reasonOf(section, c), expected, c);
+});
+
+test('reason: con video en la página, los 1.2.x sin reglas conservan su método de revisión', () => {
+  const section = computeWcagSection([], {
+    axeResults: [page('https://a.test', { passes: [pass('video-caption', ['wcag2a', 'wcag122'])] })]
+  });
+  assert.equal(statusOf(section, '1.2.2'), 'ok');
+  assert.equal(reasonOf(section, '1.2.3').code, 'requiere_manual');
 });
 
 test('computeWcagSection: un finding sin review_status (datos viejos) cuenta como confirmado', () => {

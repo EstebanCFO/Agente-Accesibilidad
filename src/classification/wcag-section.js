@@ -16,11 +16,13 @@ function evaluadas(n) {
 }
 
 /** Motivo legible del estado de un criterio (se muestra igual en el panel y en los informes). */
-function reasonFor(status, id, { pagesAffected, pagesScanned, incomplete }) {
+function reasonFor(status, id, { pagesAffected, pagesScanned, incomplete, mediaAbsent }) {
   if (status === 'ok') return { code: 'verificado', text: 'Verificado automáticamente, sin problemas' };
   if (status === 'nok') return { code: 'con_problemas', text: `Problemas en ${paginas(pagesAffected)}` };
-  if (status === 'no_aplica') return { code: 'sin_multimedia', text: `No se encontró audio ni video ${evaluadas(pagesScanned)}` };
   if (incomplete) return { code: 'indeterminado', text: 'El agente no pudo determinarlo automáticamente' };
+  if (mediaAbsent && id.startsWith('1.2.')) {
+    return { code: 'sin_multimedia', text: `No se detectó audio ni video ${evaluadas(pagesScanned)}: confirmar manualmente que el sitio no tiene contenido multimedia` };
+  }
   if (!hasAutomatedRules(id)) {
     return { code: manualReviewFor(id).assistive ? 'requiere_asistiva' : 'requiere_manual', text: manualReviewLabel(id) };
   }
@@ -32,7 +34,8 @@ function reasonFor(status, id, { pagesAffected, pagesScanned, incomplete }) {
  *   nok       - al menos una violación confirmada de axe-core;
  *   a_validar - algún incomplete sin violación, o ninguna regla automática evaluada (requiere
  *               tecnología asistiva o revisión manual). Nunca cuenta como OK;
- *   no_aplica - regla de na-criteria.js (solo inapplicable), sale del total;
+ *   no_aplica - hoy no se genera: sin audio/video detectado, los 1.2.x quedan a_validar con
+ *               motivo sin_multimedia (se mantiene en los conteos por compatibilidad);
  *   ok        - al menos una regla del criterio pasó y no hubo violación ni incomplete.
  * Sin veredicto ni porcentaje: el cumplimiento se decide después de la validación humana.
  * Los hallazgos complementarios (revisión del Agente) no cambian estados.
@@ -56,7 +59,10 @@ export function computeWcagSection(findings, { axeResults = [], includeExtended 
       for (const criterion of extractWcagCriteria(entry.tags)) passed.add(criterion);
     }
   }
+  // Sin audio/video detectado, los criterios multimedia NO se dan por "No aplica": quedan a
+  // validar (decisión del usuario) con el mismo motivo para todos los 1.2.x.
   const naSet = new Set(computeNaCriteria(axeResults, { includeExtended }));
+  const mediaAbsent = naSet.has('1.2.1') || naSet.has('1.2.2');
 
   const inScope = [
     ...ontiCriteria.map((c) => ({ ...c, in_scope: 'onti' })),
@@ -68,11 +74,10 @@ export function computeWcagSection(findings, { axeResults = [], includeExtended 
     let status;
     if (confirmed.has(id)) status = 'nok';
     else if (toReview.has(id)) status = 'a_validar';
-    else if (naSet.has(id)) status = 'no_aplica';
     else if (passed.has(id)) status = 'ok';
     else status = 'a_validar';
     const reason = reasonFor(status, id, {
-      pagesAffected: pagesByCriterion.get(id)?.size ?? 0, pagesScanned: scanned.length, incomplete: toReview.has(id)
+      pagesAffected: pagesByCriterion.get(id)?.size ?? 0, pagesScanned: scanned.length, incomplete: toReview.has(id), mediaAbsent
     });
     return { wcag_criterion: id, level: c.level, description: c.description, in_scope: c.in_scope, status, reason };
   });

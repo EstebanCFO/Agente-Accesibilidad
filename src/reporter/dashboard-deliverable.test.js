@@ -140,13 +140,14 @@ test('buildDashboardHtml desglosa los "a validar" por motivo en la tabla de los 
   assert.match(html, /NOK<\/td><td>1<\/td>/);
   assert.match(html, new RegExp(`A validar — requiere tecnología asistiva</td><td>${count('requiere_asistiva')}</td>`));
   assert.match(html, new RegExp(`A validar — sin elementos evaluables</td><td>${count('sin_elementos')}</td>`));
-  assert.match(html, /No aplica<\/td><td>1<\/td>/);
+  assert.match(html, new RegExp(`A validar — sin audio ni video detectado</td><td>${count('sin_multimedia')}</td>`));
+  assert.doesNotMatch(html, /No aplica<\/td><td>/);
 });
 
 test('buildDashboardHtml lista cada criterio a validar o no aplicable con su motivo', () => {
   const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: sectionScores(), findings: [NOK_111] });
   assert.match(html, /Criterios a validar y no aplicables/);
-  assert.match(html, /1\.2\.1[\s\S]*?No aplica[\s\S]*?No se encontró audio ni video en la página evaluada/);
+  assert.match(html, /1\.2\.1[\s\S]*?A validar[\s\S]*?No se detectó audio ni video en la página evaluada: confirmar manualmente/);
   assert.match(html, /2\.4\.7[\s\S]*?Requiere tecnología asistiva: navegación solo con teclado/);
 });
 

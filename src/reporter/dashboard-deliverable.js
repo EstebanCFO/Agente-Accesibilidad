@@ -75,6 +75,7 @@ const A_VALIDAR_REASONS = [
   { code: 'requiere_asistiva', label: 'A validar — requiere tecnología asistiva' },
   { code: 'requiere_manual', label: 'A validar — requiere revisión manual' },
   { code: 'sin_elementos', label: 'A validar — sin elementos evaluables' },
+  { code: 'sin_multimedia', label: 'A validar — sin audio ni video detectado' },
   { code: 'indeterminado', label: 'A validar — no determinado automáticamente' }
 ];
 const STATUS_LABEL = { ok: 'OK', nok: 'NOK', a_validar: 'A validar', no_aplica: 'No aplica' };
