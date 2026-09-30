@@ -18,6 +18,9 @@ const AXE_SOURCE_ES = `${axeCore.source};axe.configure({ locale: ${JSON.stringif
 // se usan hoy en el scan crudo (conteos y resaltado en vivo del demo), aunque classify-findings.js
 // las marque out_of_scope para el compliance ONTI. No se restringe a solo tags WCAG numerados
 // -eso se probó primero y rompía justamente esas ~30 reglas best-practice.
+const SCREENSHOT_JPEG_QUALITY = 70;
+const MAX_SCREENSHOT_HEIGHT = 7900;
+
 const DEFAULT_WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'];
 
 export class AuthRequiredError extends Error {
@@ -92,7 +95,8 @@ function toAxeResult(url, results, extras = {}) {
       }))
     })),
     passes: results.passes.map((item) => ({ id: item.id, tags: item.tags })),
-    inapplicable: results.inapplicable.map((item) => ({ id: item.id, tags: item.tags }))
+    inapplicable: results.inapplicable.map((item) => ({ id: item.id, tags: item.tags })),
+    rule_impacts: extras.ruleImpacts || {}
   };
   if (extras.screenshot) base.screenshot = extras.screenshot;
   if (extras.html) base.html = extras.html;
@@ -126,17 +130,36 @@ async function scanOne(browser, { url, wcagTags, auth, viewport, timeout, waitFo
     const tagsToUse = Array.isArray(wcagTags) && wcagTags.length > 0 ? wcagTags : DEFAULT_WCAG_TAGS;
     axeBuilder.withTags(tagsToUse);
     const results = await axeBuilder.analyze();
+    // axe-core no trae impact en passes/inapplicable; la Sección 2 lo necesita para ponderar.
+    // Se lee de la metadata de las reglas best-practice ya inyectadas en la página.
+    // Solo las que corrieron en este análisis (la metadata incluye reglas experimentales que no).
+    const ranIds = [...results.violations, ...results.incomplete, ...results.passes, ...results.inapplicable].map((r) => r.id);
+    const ruleImpacts = await page.evaluate((ids) => Object.fromEntries(
+      (window.axe?._audit?.rules || [])
+        .filter((r) => ids.includes(r.id) && (r.tags || []).includes('best-practice'))
+        .map((r) => [r.id, r.impact ?? null])
+    ), ranIds).catch(() => ({}));
 
     const extras = {};
     if (captureScreenshot) {
-      const buffer = await page.screenshot({ fullPage: true });
+      // JPEG en vez de PNG: pesa varias veces menos, sube más rápido a la API y el modelo ve
+      // lo mismo. Alto recortado a 7.900px porque la API rechaza imágenes de más de 8.000px por
+      // lado (en páginas muy largas la captura completa fallaba).
+      const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight);
+      const pageWidth = page.viewportSize()?.width ?? await page.evaluate(() => document.documentElement.clientWidth);
+      const buffer = await page.screenshot({
+        fullPage: true,
+        type: 'jpeg',
+        quality: SCREENSHOT_JPEG_QUALITY,
+        ...(pageHeight > MAX_SCREENSHOT_HEIGHT ? { clip: { x: 0, y: 0, width: pageWidth, height: MAX_SCREENSHOT_HEIGHT } } : {})
+      });
       extras.screenshot = buffer.toString('base64');
     }
     if (captureHtml) {
       extras.html = await page.content();
     }
 
-    return toAxeResult(url, results, extras);
+    return toAxeResult(url, results, { ...extras, ruleImpacts });
   } finally {
     await context.close();
   }

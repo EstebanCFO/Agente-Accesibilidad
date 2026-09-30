@@ -133,3 +133,18 @@ test('scanUrl captura incomplete[], passes[] e inapplicable[] con su forma compl
   assert.ok(typeof someInapplicable.id === 'string');
   assert.ok(Array.isArray(someInapplicable.tags));
 });
+
+test('scanUrl captura la screenshot como JPEG', async () => {
+  const result = await scanUrl({ url: 'https://example.com', captureScreenshot: true });
+  assert.ok(result.screenshot.startsWith('/9j/'), 'la captura debería ser JPEG');
+});
+
+test('scanUrl guarda rule_impacts de las reglas best-practice (axe no los trae en passes/inapplicable)', async () => {
+  const result = await scanUrl({ url: 'https://example.com' });
+  assert.equal(result.rule_impacts.region, 'moderate');
+  for (const id of Object.keys(result.rule_impacts)) {
+    const all = [...result.violations, ...result.incomplete, ...result.passes, ...result.inapplicable];
+    const tags = all.find((r) => r.id === id)?.tags ?? [];
+    assert.ok(tags.includes('best-practice'), `"${id}" no es best-practice`);
+  }
+});
