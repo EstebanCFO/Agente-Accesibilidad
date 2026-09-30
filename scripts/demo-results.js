@@ -1,0 +1,124 @@
+/**
+ * Arma las tarjetas de resultados parciales que muestra el panel (puntaje ONTI y semáforo de
+ * problemas por severidad). Lógica pura, sin I/O.
+ */
+const IMPACT_ORDER = ['critical', 'serious', 'moderate', 'minor'];
+
+// La normativa BCRA es WCAG 2.0 A+AA; "Sumar WCAG 2.2" agrega 2.1 A/AA y 2.2 AA (2.2 incluye 2.1).
+// Las reglas 'best-practice' de axe no son criterios WCAG y nunca se cuentan acá.
+const BCRA_TAGS = ['wcag2a', 'wcag2aa'];
+const EXTENDED_TAGS = ['wcag21a', 'wcag21aa', 'wcag22aa'];
+
+/** Violación que cuenta para la Sección 1: WCAG 2.0 (BCRA), + 2.1/2.2 con includeExtended. */
+export function isWcagViolation(violation, { includeExtended = false } = {}) {
+  const tags = includeExtended ? [...BCRA_TAGS, ...EXTENDED_TAGS] : BCRA_TAGS;
+  return (violation.tags || []).some((tag) => tags.includes(tag));
+}
+
+/**
+ * Cuenta violaciones de axe-core por severidad (una por regla por página), solo de reglas WCAG
+ * 2.0 (BCRA) y, con includeExtended, también WCAG 2.1/2.2.
+ */
+export function countViolationsByImpact(axeResults = [], { includeExtended = false } = {}) {
+  const counts = { critical: 0, serious: 0, moderate: 0, minor: 0 };
+  for (const result of axeResults) {
+    for (const violation of result.violations || []) {
+      if (!isWcagViolation(violation, { includeExtended })) continue;
+      if (IMPACT_ORDER.includes(violation.impact)) counts[violation.impact] += 1;
+    }
+  }
+  return counts;
+}
+
+/** Tarjeta del puntaje ONTI a partir de calculateScore().summary. */
+export function buildScoreCard(summary) {
+  if (!summary) return null;
+  const threshold = summary.effective_conformance_threshold ?? summary.conformance_threshold;
+  const conforme = Boolean(summary.onti_conformance);
+  return {
+    key: 'score',
+    label: 'Cumplimiento ONTI',
+    value: `${summary.onti_criteria_compliant}/${summary.onti_criteria_evaluated}`,
+    detail: `${summary.onti_compliance_percentage}% · ${conforme ? 'Conforme' : 'No conforme'} (mín. ${threshold})`,
+    tone: conforme ? 'ok' : 'bad',
+    ring: { pct: summary.onti_compliance_percentage, tone: conforme ? 'ok' : 'bad' }
+  };
+}
+
+const PCT = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 2 });
+
+/**
+ * Tarjeta de la Sección 1: conteo sin veredicto. El anillo muestra cuánto se pudo validar
+ * automáticamente ((OK+NOK)/total), no un porcentaje de cumplimiento.
+ */
+export function buildWcagCard(section, { includeExtended = false } = {}) {
+  const validated = section.total ? Math.round(((section.ok + section.nok) / section.total) * 10000) / 100 : 0;
+  const na = section.no_aplica ? ` · ${section.no_aplica} no aplican` : '';
+  return {
+    key: 'wcag',
+    label: includeExtended ? 'Compliance WCAG 2.0 (BCRA) + 2.2' : 'Compliance WCAG 2.0 (BCRA)',
+    value: `${section.ok} OK · ${section.nok} NOK`,
+    detail: `${section.a_validar} a validar (de ${section.total})${na}`,
+    title: 'Los criterios "a validar" requieren tecnología asistiva o revisión manual y no cuentan como OK.',
+    ring: { pct: validated, tone: 'warn' }
+  };
+}
+
+/** Tarjeta de la Sección 2: puntaje ponderado por impacto; no afecta el compliance. */
+export function buildBestPracticesCard(bp) {
+  return {
+    key: 'best-practices',
+    label: 'Buenas prácticas (complementario)',
+    value: bp.score === null ? '—' : `${PCT.format(bp.score)}%`,
+    detail: `${bp.cumple} cumplen · ${bp.mejora} a mejorar · ${bp.no_aplica} no aplican`,
+    title: 'Reglas de buenas prácticas de axe-core, ponderadas por impacto. No forman parte de la normativa BCRA.'
+  };
+}
+
+/** Tarjeta semáforo de problemas WCAG por severidad (2.0 BCRA, más 2.2 si se seleccionó). */
+export function buildSeverityCard(counts, { includeExtended = false } = {}) {
+  const total = IMPACT_ORDER.reduce((sum, k) => sum + (counts[k] || 0), 0);
+  return {
+    key: 'severity',
+    label: includeExtended ? 'Problemas WCAG 2.0 (BCRA) + 2.2' : 'Problemas WCAG 2.0 (BCRA)',
+    value: String(total),
+    breakdown: [
+      { label: 'Críticos', value: counts.critical || 0, tone: 'critical' },
+      { label: 'Serios', value: counts.serious || 0, tone: 'serious' },
+      { label: 'Moderados', value: counts.moderate || 0, tone: 'moderate' },
+      { label: 'Menores', value: counts.minor || 0, tone: 'minor' }
+    ]
+  };
+}
+
+/**
+ * Tarjeta de hallazgos adicionales de la revisión con IA. unavailable: todas las llamadas a la IA
+ * fallaron - se muestra "No disponible" en vez de un 0 que se leería como "sin problemas".
+ */
+export function buildAiCard(visualCount, uxCount, { unavailable = false } = {}) {
+  if (unavailable) {
+    return { key: 'ai', label: 'Hallazgos del Agente (complementario)', value: '—', detail: 'No disponible (ver actividad)', tone: 'warn' };
+  }
+  return {
+    key: 'ai',
+    label: 'Hallazgos del Agente (complementario)',
+    value: String(visualCount + uxCount),
+    detail: `${visualCount} visuales · ${uxCount} de UX`
+  };
+}
+
+const NUMBER = new Intl.NumberFormat('es-AR');
+const USD = new Intl.NumberFormat('es-AR', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+
+/** Tarjeta de consumo de la IA: tokens totales y costo estimado en US$. */
+export function buildUsageCard(usage, costUsd) {
+  const total = usage.inputTokens + usage.outputTokens + usage.cacheWriteTokens + usage.cacheReadTokens;
+  const cost = costUsd === null || costUsd === undefined ? 'costo s/d' : `≈ US$ ${USD.format(costUsd)}`;
+  return {
+    key: 'usage',
+    label: 'Consumo de IA',
+    value: `${NUMBER.format(total)} tokens`,
+    detail: `${cost} · ${usage.calls} llamada(s)`,
+    title: `Entrada ${NUMBER.format(usage.inputTokens)} · salida ${NUMBER.format(usage.outputTokens)} · caché ${NUMBER.format(usage.cacheReadTokens + usage.cacheWriteTokens)}`
+  };
+}
