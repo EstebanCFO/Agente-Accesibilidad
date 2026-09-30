@@ -99,8 +99,6 @@ export function buildConsolidatedReportHtml(data) {
   const generatedAt = new Date();
 
   const naCriteria = computeNaCriteria(axeResults, { includeExtended: false });
-  const findingCriteria = new Set(findings.filter((f) => f.in_scope === 'onti').map((f) => f.wcag_criterion));
-  const matrizNa = naCriteria.filter((c) => !findingCriteria.has(c));
   const includeExtended = data.includeExtended ?? false;
 
   const sections = [
@@ -108,7 +106,7 @@ export function buildConsolidatedReportHtml(data) {
     { key: 'inventario', title: 'Inventario de hallazgos', html: buildInventarioHtml({ jobId: data.jobId, findings, complementaryFindings, urls }) },
     { key: 'matriz', title: 'Matriz de criticidad WCAG 2.0 AA', html: buildMatrizHtml({
       jobId: data.jobId, channel: data.channel,
-      conformity: buildConformityMatrix({ findings, urls, includeExtended, naCriteria: matrizNa }),
+      conformity: buildConformityMatrix({ findings, urls, includeExtended, axeResults }),
       severityImpactGrid: buildSeverityImpactGrid(findings)
     }) }
   ].map((s) => ({ ...s, ...sectionFrom(s.html, s.key) }));

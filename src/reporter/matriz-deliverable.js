@@ -1,12 +1,15 @@
 import ExcelJS from 'exceljs';
-import { ontiCriteria, extendedCriteria } from '../classification/wcag-map.js';
+import { ontiCriteria, extendedCriteria, extractWcagCriteria } from '../classification/wcag-map.js';
 import { classifyModule } from '../classification/module-classifier.js';
+import { criteriaWithoutAutomatedRules, pageLabels, manualReviewLabel, manualReviewFor } from './report-helpers.js';
+import { DS_CSS, DS_COLORS, DS_FRAMED_SCRIPT, dsHeaderHtml, dsFooterHtml } from './design-system.js';
 
 const SEVERITY_ORDER = ['critical', 'serious', 'moderate', 'minor'];
 const IMPACT_ORDER = ['bloqueante', 'degradado', 'menor'];
 const SEVERITY_LABEL_ES = { critical: 'Crítico', serious: 'Alto', moderate: 'Medio', minor: 'Bajo' };
 const IMPACT_LABEL_ES = { bloqueante: 'Bloqueante', degradado: 'Degradado', menor: 'Menor' };
-const STATUS_LABEL_ES = { conforme: 'Conforme', no_conforme: 'No conforme', parcialmente_conforme: 'Parcial', no_aplica: 'N/A' };
+const STATUS_LABEL_ES = { ok: 'OK', nok: 'NOK', a_validar: 'A validar', no_aplica: 'No aplica' };
+const STATUS_RANK = { nok: 3, a_validar: 2, ok: 1, no_aplica: 0 };
 
 /**
  * No hay ninguna fuente de datos de "impacto de negocio" todavía. En vez de inventar una,
@@ -27,22 +30,29 @@ function taggedCriteria(includeExtended) {
 }
 
 /**
- * Vista detallada de conformidad criterio × URL individual (complementa la vista por
- * módulo de `buildModuleConformityMatrix`). 4 estados por celda: 'no_aplica' si el criterio de esa
- * fila está en `naCriteria` (propiedad del criterio para todo el canal, no de una URL puntual);
- * si no, 'no_conforme' si hay un finding review_status:'confirmado' afectando esa URL;
- * si no, 'parcialmente_conforme' si hay uno review_status:'requiere_revision'; si no, 'conforme'.
+ * Vista detallada criterio × URL, con los mismos estados que la Sección 1 del informe:
+ *   nok       - un finding confirmado de axe-core afecta esa página;
+ *   a_validar - un finding requiere_revision en esa página, el criterio no tiene reglas
+ *               automáticas, o ninguna de sus reglas se evaluó en esa página;
+ *   ok        - alguna regla del criterio pasó en esa página y no hubo problema.
+ * Sin axeResults no se sabe qué reglas pasaron: nada se da por OK. Los multimedia quedan a
+ * validar, igual que en la Sección 1 (no hay "No aplica" automático).
  */
-export function buildConformityMatrix({ findings, urls, includeExtended = false, naCriteria = [] }) {
-  const naSet = new Set(naCriteria);
+export function buildConformityMatrix({ findings, urls, includeExtended = false, axeResults = [] }) {
+  const sinReglas = new Set(criteriaWithoutAutomatedRules().missing);
   const confirmed = new Set();
   const review = new Set();
-
   for (const finding of findings) {
+    if (finding.source && finding.source !== 'axe-core') continue;
     if (finding.in_scope !== 'onti' && !(includeExtended && finding.in_scope === 'extended_22')) continue;
     const target = finding.review_status === 'requiere_revision' ? review : confirmed;
-    for (const url of finding.affected_urls || []) {
-      target.add(`${url}::${finding.wcag_criterion}`);
+    for (const url of finding.affected_urls || []) target.add(`${url}::${finding.wcag_criterion}`);
+  }
+  const passed = new Set();
+  for (const result of axeResults || []) {
+    if (!result || result.error) continue;
+    for (const entry of result.passes || []) {
+      for (const criterion of extractWcagCriteria(entry.tags)) passed.add(`${result.url}::${criterion}`);
     }
   }
 
@@ -51,12 +61,12 @@ export function buildConformityMatrix({ findings, urls, includeExtended = false,
     level: criterion.level,
     in_scope: criterion.in_scope,
     description: criterion.description,
+    manual_review: criterion.in_scope === 'onti' && sinReglas.has(criterion.wcag_criterion) ? manualReviewFor(criterion.wcag_criterion) : null,
     cells: Object.fromEntries(urls.map((url) => {
-      if (naSet.has(criterion.wcag_criterion)) return [url, 'no_aplica'];
       const key = `${url}::${criterion.wcag_criterion}`;
-      if (confirmed.has(key)) return [url, 'no_conforme'];
-      if (review.has(key)) return [url, 'parcialmente_conforme'];
-      return [url, 'conforme'];
+      if (confirmed.has(key)) return [url, 'nok'];
+      if (passed.has(key) && !review.has(key)) return [url, 'ok'];
+      return [url, 'a_validar'];
     }))
   }));
 
@@ -64,44 +74,21 @@ export function buildConformityMatrix({ findings, urls, includeExtended = false,
 }
 
 /**
- * Vista adicional: mismo criterio de conformidad que `buildConformityMatrix`, pero agrupando
- * columnas por módulo (primer segmento de path, ver module-classifier.js) en vez de por URL
- * individual. Un módulo hereda el peor estado de cualquiera de sus URLs
- * (no_conforme > parcialmente_conforme > conforme), mismo criterio que ya usa calculate-score.js
- * para by_module. 'no_aplica' es una propiedad del criterio para todo el canal, no depende de
- * qué URLs caen en cada módulo.
+ * Misma matriz agrupando columnas por módulo (primer segmento del path, ver
+ * module-classifier.js): cada módulo toma el peor estado de sus páginas, así que es OK solo si
+ * todas sus páginas lo están.
  */
-export function buildModuleConformityMatrix({ findings, urls, includeExtended = false, naCriteria = [] }) {
+export function buildModuleConformityMatrix({ findings, urls, includeExtended = false, axeResults = [] }) {
+  const byUrl = buildConformityMatrix({ findings, urls, includeExtended, axeResults });
   const urlToModule = new Map(urls.map((url) => [url, classifyModule(url)]));
   const modules = [...new Set(urls.map((url) => urlToModule.get(url)))];
-  const naSet = new Set(naCriteria);
-
-  const confirmed = new Set();
-  const review = new Set();
-
-  for (const finding of findings) {
-    if (finding.in_scope !== 'onti' && !(includeExtended && finding.in_scope === 'extended_22')) continue;
-    const target = finding.review_status === 'requiere_revision' ? review : confirmed;
-    for (const url of finding.affected_urls || []) {
-      const module = urlToModule.get(url) ?? classifyModule(url);
-      target.add(`${module}::${finding.wcag_criterion}`);
-    }
-  }
-
-  const rows = taggedCriteria(includeExtended).map((criterion) => ({
-    wcag_criterion: criterion.wcag_criterion,
-    level: criterion.level,
-    in_scope: criterion.in_scope,
-    description: criterion.description,
+  const rows = byUrl.rows.map(({ cells, manual_review: _mr, ...row }) => ({
+    ...row,
     cells: Object.fromEntries(modules.map((module) => {
-      if (naSet.has(criterion.wcag_criterion)) return [module, 'no_aplica'];
-      const key = `${module}::${criterion.wcag_criterion}`;
-      if (confirmed.has(key)) return [module, 'no_conforme'];
-      if (review.has(key)) return [module, 'parcialmente_conforme'];
-      return [module, 'conforme'];
+      const statuses = urls.filter((u) => urlToModule.get(u) === module).map((u) => cells[u]);
+      return [module, statuses.reduce((worst, st) => (STATUS_RANK[st] > STATUS_RANK[worst] ? st : worst), 'no_aplica')];
     }))
   }));
-
   return { modules, rows };
 }
 
@@ -144,8 +131,8 @@ function escapeHtml(value) {
   }[char]));
 }
 
-function conformityTableHtml({ columns, rows }) {
-  const headerCells = columns.map((column) => `<th>${escapeHtml(column)}</th>`).join('');
+function conformityTableHtml({ columns, rows, labels }) {
+  const headerCells = columns.map((column) => `<th title="${escapeHtml(column)}">${escapeHtml(labels?.get(column) ?? column)}</th>`).join('');
   const bodyRows = rows.map((row) => {
     const cells = columns.map((column) => {
       const status = row.cells[column];
@@ -154,79 +141,113 @@ function conformityTableHtml({ columns, rows }) {
     return `<tr>
       <td>${escapeHtml(row.wcag_criterion)}</td>
       <td>${escapeHtml(row.level)}</td>
-      <td>${row.in_scope === 'onti' ? 'ONTI' : 'Extendida 2.1/2.2'}</td>
-      <td>${escapeHtml(row.description)}</td>
+      <td>${escapeHtml(row.description)}${row.in_scope === 'extended_22' ? ' <small>(WCAG 2.1/2.2, no exigido)</small>' : ''}${row.manual_review ? `<br><span class="review-tag ${row.manual_review.assistive ? 'at' : 'manual'}">${escapeHtml(manualReviewLabel(row.wcag_criterion))}</span>` : ''}</td>
       ${cells}
     </tr>`;
   }).join('\n');
 
-  return `<table>
-    <thead><tr><th>Criterio</th><th>Nivel</th><th>Alcance</th><th>Descripción</th>${headerCells}</tr></thead>
+  return `<div class="card table-wrap"><table>
+    <thead><tr><th>Criterio</th><th>Nivel</th><th>Descripción</th>${headerCells}</tr></thead>
     <tbody>${bodyRows}</tbody>
-  </table>`;
+  </table></div>`;
 }
 
 function severityImpactTableHtml(grid) {
-  const rows = grid.map((cell) => `<tr>
-    <td>${cell.severity_label}</td>
-    <td>${cell.impacto_label}</td>
-    <td>${cell.findings_count}</td>
+  const cell = (severity, impacto) => grid.find((c) => c.severity === severity && c.impacto === impacto)?.findings_count ?? 0;
+  const total = grid.reduce((sum, c) => sum + c.findings_count, 0);
+  const rows = SEVERITY_ORDER.map((severity) => `<tr>
+    <th scope="row">${SEVERITY_LABEL_ES[severity]}</th>
+    ${IMPACT_ORDER.map((impacto) => {
+      const n = cell(severity, impacto);
+      return `<td class="${n > 0 ? 'si-hit' : 'si-zero'}">${n}</td>`;
+    }).join('')}
   </tr>`).join('\n');
-  return `<table>
-    <thead><tr><th>Severidad</th><th>Impacto</th><th>Hallazgos</th></tr></thead>
+  return `<div class="card table-wrap si-wrap"><table class="si-grid">
+    <thead><tr><th>Severidad \\ Impacto</th>${IMPACT_ORDER.map((i) => `<th>${IMPACT_LABEL_ES[i]}</th>`).join('')}</tr></thead>
     <tbody>${rows}</tbody>
-  </table>`;
+  </table></div>
+  <p class="meta">Total: ${total} problema(s) distintos. Cada problema es un tipo de falla sobre un criterio; puede repetirse en varias páginas y elementos (ver Inventario de hallazgos).</p>`;
 }
 
-export function buildMatrizHtml({ jobId, channel, conformity, moduleConformity, severityImpactGrid }) {
-  const moduleSectionHtml = moduleConformity ? `
-  <h2>Vista por módulo — Conformidad por criterio × módulo</h2>
-  <p class="meta">Módulo derivado del primer segmento del path de cada URL escaneada (ver <code>module-classifier.js</code>). Un módulo hereda "No conforme" si cualquiera de sus URLs lo está.</p>
-  ${conformityTableHtml({ columns: moduleConformity.modules, rows: moduleConformity.rows })}` : '';
+const LEYENDA_ESTADOS = `<ul class="legend">
+  <li><span class="sw status-ok"></span><strong>OK:</strong> el agente verificó el criterio en la página y no encontró problemas.</li>
+  <li><span class="sw status-nok"></span><strong>NOK:</strong> hay al menos un problema confirmado en esa página.</li>
+  <li><span class="sw status-a_validar"></span><strong>A validar:</strong> el agente no pudo verificarlo en esa página (requiere tecnología asistiva o revisión manual, no había elementos a evaluar, o hay indicios que una persona tiene que revisar). No cuenta como OK.</li>
+</ul>`;
+
+export function buildMatrizHtml({ jobId, channel, conformity, severityImpactGrid }) {
+  const labels = pageLabels(conformity.urls);
 
   return `<!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<title>Matriz de Criticidad — ${escapeHtml(jobId)}</title>
-<style>
-  body { font-family: Arial, Helvetica, sans-serif; margin: 2rem; color: #1a1a1a; }
-  h1 { font-size: 1.4rem; }
-  h2 { font-size: 1.1rem; margin-top: 2.5rem; }
-  .meta { color: #555; margin-bottom: 1rem; }
-  table { border-collapse: collapse; width: 100%; font-size: 0.8rem; margin-bottom: 2rem; }
-  th, td { border: 1px solid #ddd; padding: 5px 7px; text-align: left; }
-  th { background: #14213d; color: #fff; }
-  td.status-conforme { background: #e6f4ea; color: #1e7a34; }
-  td.status-no_conforme { background: #fdecea; color: #a01818; }
-  td.status-parcialmente_conforme { background: #fff4e0; color: #8a5a00; }
-  td.status-no_aplica { background: #eeeeee; color: #666; }
+<title>Matriz de criticidad WCAG 2.0 AA — ${escapeHtml(jobId)}</title>
+<style>${DS_CSS}
+  h2 { margin-top: 8px; }
+  .table-wrap { overflow-x: auto; padding: 0; }
+  table { font-size: 12px; }
+  th { background: var(--navy); color: #fff; border-bottom: 0; }
+  td.status-ok { background: var(--green-l); color: var(--green-text); font-weight: 600; }
+  td.status-nok { background: var(--red-l); color: var(--red-text); font-weight: 600; }
+  td.status-a_validar { background: var(--gray1); color: var(--text2); font-style: italic; }
+  td.status-no_aplica { background: var(--gray2); color: var(--text2); }
+  .legend { list-style: none; padding: 0; margin: 0 0 14px; font-size: 12px; color: var(--text2); display: grid; gap: 4px; }
+  .legend .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -2px; border: 1px solid var(--border); }
+  .legend .status-ok { background: var(--green-l); } .legend .status-nok { background: var(--red-l); }
+  .legend .status-a_validar { background: var(--gray1); }
+  .review-tag { display: inline-block; margin-top: 3px; font-size: 10.5px; font-weight: 600; border-radius: 10px; padding: 1px 8px; }
+  .review-tag.at { background: var(--blue-l, #E8EFFB); color: var(--nav-active, #1B3F8A); border: 1px solid var(--nav-active, #1B3F8A); }
+  .review-tag.manual { background: var(--gray1); color: var(--text2); border: 1px solid var(--border); }
+  table.si-grid { width: auto; min-width: 420px; }
+  .si-wrap { display: inline-block; max-width: 100%; }
+  td[class^="status-"] { white-space: nowrap; }
+  .legend .sw { border-color: var(--text2); }
+  table.si-grid th[scope=row] { background: var(--gray1); color: var(--text); text-align: left; }
+  table.si-grid td { text-align: center; font-weight: 600; min-width: 90px; }
+  td.si-hit { background: var(--red-l); color: var(--red-text); }
+  td.si-zero { color: var(--text2); font-weight: 400; }
+  dl.si-help { font-size: 12px; color: var(--text2); display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0 0 12px; }
+  dl.si-help dt { font-weight: 700; color: var(--text); } dl.si-help dd { margin: 0; }
 </style>
 </head>
 <body>
-  <h1>Matriz de Criticidad</h1>
-  <p class="meta">Job: ${escapeHtml(jobId)} · Canal: ${escapeHtml(channel ?? 'N/D')} · Generado: ${new Date().toISOString()}</p>
-  ${moduleSectionHtml}
-  <h2>Vista detallada — Conformidad por criterio × URL</h2>
-  ${conformityTableHtml({ columns: conformity.urls, rows: conformity.rows })}
+  ${DS_FRAMED_SCRIPT}
+  ${dsHeaderHtml('Matriz de criticidad WCAG 2.0 AA')}
+  <main>
+  <h1>Matriz de criticidad WCAG 2.0 AA</h1>
+  <p class="meta">Job: ${escapeHtml(jobId)} · Generado: ${new Date().toISOString()}</p>
+  <h2>Conformidad de cada criterio en cada página</h2>
+  <p class="meta">Cada fila es un criterio de la Circular BCRA y cada columna una de las ${conformity.urls.length} página(s) auditadas. Muestra en qué páginas puntuales falla cada criterio.</p>
+  ${LEYENDA_ESTADOS}
+  ${conformityTableHtml({ columns: conformity.urls, rows: conformity.rows, labels })}
 
-  <h2>Vista secundaria — Severidad × Impacto</h2>
+  <h2>Problemas por severidad e impacto en el usuario</h2>
+  <p class="meta">Cruza qué tan grave es cada problema técnico con cuánto afecta a una persona con discapacidad. Sirve para ver de un vistazo dónde se concentra el riesgo: los problemas en la esquina superior izquierda (Crítico + Bloqueante) son los primeros a resolver.</p>
+  <dl class="si-help">
+    <dt>Severidad</dt><dd>Gravedad técnica que asigna el agente al problema (Crítico, Alto, Medio, Bajo).</dd>
+    <dt>Bloqueante</dt><dd>Criterio de Nivel A: sin corregirlo, algunas personas no pueden usar la página.</dd>
+    <dt>Degradado</dt><dd>Criterio de Nivel AA: la página se puede usar, pero con dificultad.</dd>
+    <dt>Menor</dt><dd>Criterio de la capa extendida WCAG 2.1/2.2 (no exigida por la Circular BCRA).</dd>
+  </dl>
   ${severityImpactTableHtml(severityImpactGrid)}
+  </main>
+  ${dsFooterHtml()}
 </body>
 </html>`;
 }
 
-function addConformitySheet(workbook, name, { columns, rows }) {
+function addConformitySheet(workbook, name, { columns, rows, labels }) {
   const sheet = workbook.addWorksheet(name);
   sheet.columns = [
     { header: 'Criterio WCAG', key: 'wcag_criterion', width: 14 },
     { header: 'Nivel', key: 'level', width: 8 },
-    { header: 'Alcance', key: 'in_scope', width: 14 },
     { header: 'Descripción', key: 'description', width: 32 },
-    ...columns.map((column, index) => ({ header: column, key: `col_${index}`, width: 18 }))
+    { header: 'Revisión requerida', key: 'manual_review', width: 42 },
+    ...columns.map((column, index) => ({ header: labels?.get(column) ?? column, key: `col_${index}`, width: 18 }))
   ];
   sheet.addRows(rows.map((row) => {
-    const rowData = { wcag_criterion: row.wcag_criterion, level: row.level, in_scope: row.in_scope, description: row.description };
+    const rowData = { wcag_criterion: row.wcag_criterion, level: row.level, description: row.description, manual_review: row.manual_review ? manualReviewLabel(row.wcag_criterion) : '' };
     columns.forEach((column, index) => {
       rowData[`col_${index}`] = STATUS_LABEL_ES[row.cells[column]] ?? row.cells[column];
     });
@@ -235,13 +256,13 @@ function addConformitySheet(workbook, name, { columns, rows }) {
   return sheet;
 }
 
-export async function buildMatrizWorkbook({ conformity, moduleConformity, severityImpactGrid }) {
+export async function buildMatrizWorkbook({ conformity, moduleConformity, severityImpactGrid, bestPractices = null }) {
   const workbook = new ExcelJS.Workbook();
 
   if (moduleConformity) {
     addConformitySheet(workbook, 'Conformidad por módulo', { columns: moduleConformity.modules, rows: moduleConformity.rows });
   }
-  addConformitySheet(workbook, 'Conformidad', { columns: conformity.urls, rows: conformity.rows });
+  addConformitySheet(workbook, 'Conformidad por página', { columns: conformity.urls, rows: conformity.rows, labels: pageLabels(conformity.urls) });
 
   const gridSheet = workbook.addWorksheet('Severidad x Impacto');
   gridSheet.columns = [
@@ -250,6 +271,23 @@ export async function buildMatrizWorkbook({ conformity, moduleConformity, severi
     { header: 'Hallazgos', key: 'findings_count', width: 12 }
   ];
   gridSheet.addRows(severityImpactGrid);
+
+  if (bestPractices?.rules?.length) {
+    const BP_STATUS = { cumple: 'Cumple', mejora: 'Mejora sugerida', no_aplica: 'No aplica' };
+    const bpSheet = workbook.addWorksheet('Buenas prácticas');
+    bpSheet.columns = [
+      { header: 'Regla', key: 'rule_id', width: 28 },
+      { header: 'Qué pide', key: 'help', width: 50 },
+      { header: 'Estado', key: 'status', width: 18 },
+      { header: 'Impacto', key: 'impact', width: 12 },
+      { header: 'Páginas con problemas', key: 'pages', width: 40 }
+    ];
+    const bpLabels = pageLabels(bestPractices.rules.flatMap((r) => r.affected_urls));
+    bpSheet.addRows(bestPractices.rules.map((r) => ({
+      rule_id: r.rule_id, help: r.help, status: BP_STATUS[r.status] ?? r.status,
+      impact: SEVERITY_LABEL_ES[r.impact] ?? '', pages: r.affected_urls.map((u) => bpLabels.get(u) ?? u).join(', ')
+    })));
+  }
 
   return workbook;
 }

@@ -101,8 +101,10 @@ test('generateDeliverable("matriz") escribe json + html + xlsx con la vista por 
     }
   ];
 
+  const axeResults = ['https://a.test', 'https://b.test'].map((url) => ({ url, violations: [], incomplete: [], passes: [{ id: 'image-alt', tags: ['wcag2a', 'wcag111'] }], inapplicable: [] }));
+  const bestPractices = { score: 0, cumple: 0, mejora: 1, no_aplica: 0, rules: [{ rule_id: 'region', help: 'Regiones', impact: 'moderate', weight: 2, status: 'mejora', affected_urls: ['https://a.test'] }] };
   const filePaths = await generateDeliverable('matriz', {
-    jobId: 'job-3', channel: 'home_banking', findings, urls: ['https://a.test', 'https://b.test']
+    jobId: 'job-3', channel: 'home_banking', findings, urls: ['https://a.test', 'https://b.test'], axeResults, scores: { best_practices: bestPractices }
   }, { outputDir });
 
   assert.equal(filePaths.length, 3);
@@ -113,8 +115,8 @@ test('generateDeliverable("matriz") escribe json + html + xlsx con la vista por 
   const jsonDoc = JSON.parse(await readFile(jsonPath, 'utf8'));
   assert.equal(jsonDoc.conformity_matrix.rows.length, 38);
   const criterio111 = jsonDoc.conformity_matrix.rows.find((r) => r.wcag_criterion === '1.1.1');
-  assert.equal(criterio111.cells['https://a.test'], 'no_conforme');
-  assert.equal(criterio111.cells['https://b.test'], 'conforme');
+  assert.equal(criterio111.cells['https://a.test'], 'nok');
+  assert.equal(criterio111.cells['https://b.test'], 'ok');
   assert.equal(jsonDoc.severity_impact_grid.length, 12);
   assert.equal(jsonDoc.module_conformity_matrix, null);
 
@@ -124,10 +126,10 @@ test('generateDeliverable("matriz") escribe json + html + xlsx con la vista por 
 
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(xlsxPath);
-  assert.deepEqual(workbook.worksheets.map((ws) => ws.name), ['Conformidad por página', 'Severidad x Impacto']);
+  assert.deepEqual(workbook.worksheets.map((ws) => ws.name), ['Conformidad por página', 'Severidad x Impacto', 'Buenas prácticas']);
 });
 
-test('generateDeliverable("matriz") marca no_aplica cuando se pasan axe_results con un criterio N/A', async () => {
+test('generateDeliverable("matriz") deja a validar un multimedia sin video, igual que la Sección 1', async () => {
   const outputDir = await mkdtemp(path.join(tmpdir(), 'f1-deliverable-'));
   const axeResults = [
     { url: 'https://a.test', violations: [], incomplete: [], passes: [], inapplicable: [{ id: 'video-caption', tags: ['wcag2a', 'wcag122'] }] }
@@ -140,10 +142,10 @@ test('generateDeliverable("matriz") marca no_aplica cuando se pasan axe_results 
   const jsonPath = filePaths.find((p) => p.endsWith('.json'));
   const jsonDoc = JSON.parse(await readFile(jsonPath, 'utf8'));
   const criterio122 = jsonDoc.conformity_matrix.rows.find((r) => r.wcag_criterion === '1.2.2');
-  assert.equal(criterio122.cells['https://a.test'], 'no_aplica');
+  assert.equal(criterio122.cells['https://a.test'], 'a_validar');
 });
 
-test('generateDeliverable("matriz") no marca no_aplica si el criterio tiene un finding real de otra fuente', async () => {
+test('generateDeliverable("matriz") marca NOK un multimedia con un finding real aunque no se detecte video', async () => {
   const outputDir = await mkdtemp(path.join(tmpdir(), 'f1-deliverable-'));
   const findings = [{
     id: 'f1', wcag_criterion: '1.2.2', wcag_level: 'A', wcag_description: 'Subtítulos (grabado)',
@@ -160,7 +162,7 @@ test('generateDeliverable("matriz") no marca no_aplica si el criterio tiene un f
   const jsonPath = filePaths.find((p) => p.endsWith('.json'));
   const jsonDoc = JSON.parse(await readFile(jsonPath, 'utf8'));
   const criterio122 = jsonDoc.conformity_matrix.rows.find((r) => r.wcag_criterion === '1.2.2');
-  assert.equal(criterio122.cells['https://a.test'], 'no_conforme', 'debe reflejar el finding real, no ocultarlo detrás de no_aplica');
+  assert.equal(criterio122.cells['https://a.test'], 'nok');
 });
 
 test('generateDeliverable("dashboard") escribe dashboard.html con las secciones de la SPEC §8.2', async () => {

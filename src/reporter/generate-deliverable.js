@@ -62,10 +62,7 @@ const BUILDERS = {
   matriz: async (data, outputDir) => {
     const includeExtended = data.includeExtended ?? false;
     const urls = data.urls || [];
-    const rawNaCriteria = computeNaCriteria(data.axe_results ?? data.axeResults ?? [], { includeExtended: false });
-    const findingCriteria = new Set((data.findings || []).filter((f) => f.in_scope === 'onti').map((f) => f.wcag_criterion));
-    const naCriteria = rawNaCriteria.filter((c) => !findingCriteria.has(c));
-    const conformity = buildConformityMatrix({ findings: data.findings, urls, includeExtended, naCriteria });
+    const conformity = buildConformityMatrix({ findings: data.findings, urls, includeExtended, axeResults: data.axe_results ?? data.axeResults ?? [] });
     const moduleConformity = null;
     const severityImpactGrid = buildSeverityImpactGrid(data.findings);
 
@@ -76,7 +73,7 @@ const BUILDERS = {
       jobId: data.jobId, channel: data.channel, conformity, moduleConformity, severityImpactGrid
     }));
 
-    const workbook = await buildMatrizWorkbook({ conformity, moduleConformity, severityImpactGrid });
+    const workbook = await buildMatrizWorkbook({ conformity, moduleConformity, severityImpactGrid, bestPractices: data.scores?.best_practices ?? null });
     await mkdir(outputDir, { recursive: true });
     const xlsxPath = path.join(outputDir, 'matriz-criticidad.xlsx');
     await workbook.xlsx.writeFile(xlsxPath);
