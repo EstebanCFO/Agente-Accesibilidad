@@ -193,3 +193,10 @@ test('buildDashboardHtml sin pruebas de teclado lo dice y no inventa evidencia',
   assert.match(html, /No se ejecutaron las pruebas de teclado del Agente/);
   assert.doesNotMatch(html, /Prueba de teclado del Agente:/);
 });
+
+test('buildDashboardHtml: la nota de pautas usa NOK y a validar, no "no conforme" ni "no evaluados"', () => {
+  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: sectionScores(), findings: [NOK_111] });
+  const nota = html.slice(html.indexOf('Cumplimiento por Principio y Pauta WCAG'), html.indexOf('Principio 1:'));
+  assert.doesNotMatch(nota, /no conforme|no evaluados/);
+  assert.match(nota, /NOK/);
+});

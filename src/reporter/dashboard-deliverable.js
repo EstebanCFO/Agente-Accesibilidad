@@ -377,7 +377,7 @@ export function buildDashboardHtml({ jobId, channel, scores, findings: allFindin
       <div>
         <section class="card">
           <h2>Cumplimiento por Principio y Pauta WCAG</h2>
-          <p class="muted">Consolidado de todas las páginas auditadas (no es un promedio): un criterio cuenta como no conforme si falla en al menos una página. Las barras muestran solo los criterios que el agente verifica automáticamente; los "no evaluados" requieren revisión manual.</p>
+          <p class="muted">Consolidado de todas las páginas auditadas (no es un promedio): un criterio es NOK si falla en al menos una página. Las barras muestran la proporción OK sobre los criterios verificados (OK + NOK); los "a validar" se indican aparte y no cuentan como OK.</p>
           ${principiosPautasSectionHtml(criteriaStatus)}
         </section>
 
