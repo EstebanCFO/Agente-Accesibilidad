@@ -1,7 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { REPORT_FINDINGS_TOOL, criteriaListText, normalizeReportedFindings } from './report-findings-schema.js';
+import { REPORT_FINDINGS_TOOL, CONCISE_INSTRUCTIONS, criteriaListText, normalizeReportedFindings } from './report-findings-schema.js';
+import { detectImageMediaType } from './visual-audit.js';
+import { cleanHtmlForReview } from './clean-html.js';
+import { usageFromResponse } from '../ai/usage-cost.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const GUIDELINES = readFileSync(path.join(__dirname, 'references', 'ux-interaction-guidelines.md'), 'utf8');
@@ -19,7 +22,8 @@ function buildStaticPrompt(includeExtended) {
     'Sos un revisor de coherencia de navegación y UX. Vas a revisar el HTML de páginas siguiendo esta guía:',
     GUIDELINES,
     'Reportá cada hallazgo con la tool report_findings. Para "wcag_criterion" elegí el más cercano de esta lista (o omitilo si ninguno aplica):',
-    criteriaListText(includeExtended)
+    criteriaListText(includeExtended),
+    CONCISE_INSTRUCTIONS
   ].join('\n\n');
 }
 
@@ -41,16 +45,19 @@ function buildDynamicPrompt(url, html) {
 export async function runUxComplianceReview({ url, html, screenshot }, { anthropicClient, model = 'claude-sonnet-5', includeExtended = false }) {
   if (!url) throw new Error('runUxComplianceReview requiere "url"');
   if (!html) throw new Error('runUxComplianceReview requiere "html" (ver scanUrl con captureHtml:true)');
-  if (html.length > MAX_HTML_LENGTH) {
-    throw new Error(`runUxComplianceReview: el HTML supera el límite de trabajo (${html.length} > ${MAX_HTML_LENGTH} caracteres) - la página es demasiado grande para revisar de una sola vez`);
+  // Se limpia antes de medir: scripts/estilos/SVG/clases eran la mayor parte del HTML y no
+  // aportan a la revisión de UX (ver clean-html.js). El límite aplica a lo que realmente se envía.
+  const cleaned = cleanHtmlForReview(html);
+  if (cleaned.cleanedLength > MAX_HTML_LENGTH) {
+    throw new Error(`runUxComplianceReview: el HTML supera el límite de trabajo (${cleaned.cleanedLength} > ${MAX_HTML_LENGTH} caracteres, ya limpio) - la página es demasiado grande para revisar de una sola vez`);
   }
 
   const content = [
     { type: 'text', text: buildStaticPrompt(includeExtended), cache_control: { type: 'ephemeral' } },
-    { type: 'text', text: buildDynamicPrompt(url, html) }
+    { type: 'text', text: buildDynamicPrompt(url, cleaned.html) }
   ];
   if (screenshot) {
-    content.push({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: screenshot } });
+    content.push({ type: 'image', source: { type: 'base64', media_type: detectImageMediaType(screenshot), data: screenshot } });
   }
 
   const response = await anthropicClient.messages.create({
@@ -67,5 +74,11 @@ export async function runUxComplianceReview({ url, html, screenshot }, { anthrop
   const truncated = response.stop_reason === 'max_tokens';
   const toolUse = response.content.find((block) => block.type === 'tool_use');
   const rawFindings = toolUse?.input?.findings ?? [];
-  return { ux_findings: normalizeReportedFindings(rawFindings, { url, source: 'ux_review', includeExtended }), truncated };
+  return {
+    ux_findings: normalizeReportedFindings(rawFindings, { url, source: 'ux_review', includeExtended }),
+    truncated,
+    usage: usageFromResponse(response),
+    model,
+    html_chars: { original: cleaned.originalLength, sent: cleaned.cleanedLength }
+  };
 }
