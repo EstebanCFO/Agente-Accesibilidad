@@ -73,3 +73,8 @@ test('redactConfig oculta username/password/bearer_token/cookies sin mutar el or
   assert.equal(redacted.auth.config.cookies[0].value, '[REDACTED]');
   assert.equal(config.auth.config.password, 'SUPERSECRET');
 });
+
+test('los skills por defecto son las pruebas de teclado y el plan de remediación', () => {
+  const { config } = validateConfig({ target: { channel: 'home_banking', mode: 'url_list', urls: ['https://banco.test'] } });
+  assert.deepEqual(config.skills, { keyboard_review: true, generate_remediation_plan: true });
+});

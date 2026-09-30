@@ -26,7 +26,7 @@ function buildDefaults() {
       include_patterns: [],
       exclude_patterns: []
     },
-    skills: { visual_audit: true, ux_compliance_review: true, generate_remediation_plan: true },
+    skills: { keyboard_review: true, generate_remediation_plan: true },
     output: { formats: ['html', 'json', 'xlsx'], path: './reports', include_screenshots: true, language: 'es' },
     agent: { max_iterations: 30, log_level: 'info', model: 'claude-sonnet-5' }
   };
