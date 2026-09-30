@@ -14,13 +14,14 @@ import { crawlSite } from '../src/discovery/crawl-site.js';
 crawleeLog.setLevel(LogLevel.OFF);
 import { classifyFindings } from '../src/classification/classify-findings.js';
 import { calculateScore } from '../src/classification/calculate-score.js';
+import { summarizeRuleChecks } from '../src/classification/rule-checks.js';
 import { runVisualAudit, detectImageMediaType } from '../src/visual-review/visual-audit.js';
 import { runUxComplianceReview } from '../src/visual-review/ux-compliance-review.js';
 import { generateDeliverable } from '../src/reporter/generate-deliverable.js';
 import { emptyUsage, addUsage, totalTokens, resolvePricing, estimateCostUsd, PRICING_SOURCE_DATE } from '../src/visual-review/usage-cost.js';
 import { resolveSelectedPages } from './demo-page-selection.js';
 import { buildConfigFields, buildConfigSummary, defaultConfigValues, validateDemoConfig, previewTarget, MAX_PAGES_LIMIT } from './demo-config.js';
-import { countViolationsByImpact, isWcagViolation, buildWcagCard, buildBestPracticesCard, buildSeverityCard, buildAiCard, buildUsageCard } from './demo-results.js';
+import { countViolationsByImpact, isWcagViolation, buildWcagCard, buildBestPracticesCard, formatPageChecks, buildSeverityCard, buildAiCard, buildUsageCard } from './demo-results.js';
 import { runWithConcurrency } from './demo-concurrency.js';
 import { buildReportViewerHtml } from './demo-report-viewer.js';
 import { isLocalPath, listHtmlFiles, toFileUrl } from './demo-local-source.js';
@@ -350,7 +351,7 @@ async function runDemo(ui, { stage }) {
       // El log, la tarjeta y el resaltado cuentan solo WCAG (las buenas prácticas van en su propia sección).
       const wcagScope = { includeExtended: config.includeExtended };
       const wcagViolations = axeResult.violations.filter((v) => isWcagViolation(v, wcagScope));
-      ui.pushLog(`${shortUrl(url)}: ${wcagViolations.length} problema(s) WCAG, ${axeResult.pass_count} chequeo(s) aprobado(s).`, wcagViolations.length ? 'warn' : 'ok');
+      ui.pushLog(`${shortUrl(url)}: ${formatPageChecks(summarizeRuleChecks(axeResult, wcagScope))}.`, wcagViolations.length ? 'warn' : 'ok');
       ui.pushResult(buildSeverityCard(countViolationsByImpact(axeResults, wcagScope), wcagScope));
       try {
         // La página escaneada se muestra embebida en el panel con los problemas marcados.

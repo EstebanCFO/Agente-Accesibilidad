@@ -53,7 +53,7 @@ const PCT = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 2 });
  */
 export function buildWcagCard(section, { includeExtended = false } = {}) {
   const validated = section.total ? Math.round(((section.ok + section.nok) / section.total) * 10000) / 100 : 0;
-  const na = section.no_aplica ? ` · ${section.no_aplica} no aplican` : '';
+  const na = section.no_aplica ? ` · ${section.no_aplica} ${section.no_aplica === 1 ? 'no aplica' : 'no aplican'}` : '';
   return {
     key: 'wcag',
     label: includeExtended ? 'Compliance WCAG 2.0 (BCRA) + 2.2' : 'Compliance WCAG 2.0 (BCRA)',
@@ -70,7 +70,7 @@ export function buildBestPracticesCard(bp) {
     key: 'best-practices',
     label: 'Buenas prácticas (complementario)',
     value: bp.score === null ? '—' : `${PCT.format(bp.score)}%`,
-    detail: `${bp.cumple} cumplen · ${bp.mejora} a mejorar · ${bp.no_aplica} no aplican`,
+    detail: `${bp.cumple} ${bp.cumple === 1 ? 'cumple' : 'cumplen'} · ${bp.mejora} a mejorar · ${bp.no_aplica} ${bp.no_aplica === 1 ? 'no aplica' : 'no aplican'}`,
     title: 'Reglas de buenas prácticas de axe-core, ponderadas por impacto. No forman parte de la normativa BCRA.'
   };
 }
@@ -121,4 +121,17 @@ export function buildUsageCard(usage, costUsd) {
     detail: `${cost} · ${usage.calls} llamada(s)`,
     title: `Entrada ${NUMBER.format(usage.inputTokens)} · salida ${NUMBER.format(usage.outputTokens)} · caché ${NUMBER.format(usage.cacheReadTokens + usage.cacheWriteTokens)}`
   };
+}
+
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * Línea del log por página (ver summarizeRuleChecks): los chequeos son REGLAS de axe-core, no
+ * criterios; se aclaran cuántos criterios WCAG quedaron con verificación, y las buenas prácticas
+ * van aparte ("a mejorar" = falla o a revisar, igual que en la Sección 2).
+ */
+export function formatPageChecks({ wcag, best_practice: bp }) {
+  return `WCAG — ${plural(wcag.fail, 'regla con problemas', 'reglas con problemas')}, ${wcag.review} a revisar, `
+    + `${plural(wcag.pass, 'aprobada', 'aprobadas')} (${plural(wcag.criteria_with_pass, 'criterio con verificación', 'criterios con verificación')})`
+    + ` · Buenas prácticas — ${bp.fail + bp.review} a mejorar, ${plural(bp.pass, 'cumple', 'cumplen')}`;
 }

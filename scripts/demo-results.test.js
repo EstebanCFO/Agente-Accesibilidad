@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { countViolationsByImpact, isWcagViolation, buildWcagCard, buildBestPracticesCard, buildScoreCard, buildSeverityCard, buildAiCard, buildUsageCard } from './demo-results.js';
+import { countViolationsByImpact, isWcagViolation, buildWcagCard, buildBestPracticesCard, formatPageChecks, buildScoreCard, buildSeverityCard, buildAiCard, buildUsageCard } from './demo-results.js';
 
 test('countViolationsByImpact suma por severidad entre páginas e ignora impactos desconocidos', () => {
   const counts = countViolationsByImpact([
@@ -126,4 +126,25 @@ test('buildBestPracticesCard muestra puntaje ponderado y conteos', () => {
 test('buildBestPracticesCard sin reglas aplicables muestra guion, no 0% ni NaN', () => {
   const card = buildBestPracticesCard({ score: null, cumple: 0, mejora: 0, no_aplica: 3 });
   assert.equal(card.value, '—');
+});
+
+test('formatPageChecks distingue reglas WCAG, criterios y buenas prácticas', () => {
+  const text = formatPageChecks({
+    wcag: { fail: 3, review: 1, pass: 30, inapplicable: 30, criteria_with_pass: 12 },
+    best_practice: { fail: 1, review: 0, pass: 16, inapplicable: 10 }
+  });
+  assert.equal(text, 'WCAG — 3 reglas con problemas, 1 a revisar, 30 aprobadas (12 criterios con verificación) · Buenas prácticas — 1 a mejorar, 16 cumplen');
+});
+
+test('formatPageChecks usa singular con una sola regla o criterio', () => {
+  const text = formatPageChecks({
+    wcag: { fail: 1, review: 0, pass: 1, inapplicable: 0, criteria_with_pass: 1 },
+    best_practice: { fail: 0, review: 0, pass: 1, inapplicable: 0 }
+  });
+  assert.equal(text, 'WCAG — 1 regla con problemas, 0 a revisar, 1 aprobada (1 criterio con verificación) · Buenas prácticas — 0 a mejorar, 1 cumple');
+});
+
+test('las tarjetas usan singular cuando corresponde', () => {
+  assert.equal(buildWcagCard({ total: 37, ok: 8, nok: 5, a_validar: 24, no_aplica: 1 }).detail, '24 a validar (de 37) · 1 no aplica');
+  assert.equal(buildBestPracticesCard({ score: 50, cumple: 1, mejora: 1, no_aplica: 1 }).detail, '1 cumple · 1 a mejorar · 1 no aplica');
 });
