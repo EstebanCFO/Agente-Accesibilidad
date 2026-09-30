@@ -88,7 +88,7 @@ const BUILDERS = {
   },
   dashboard: async (data, outputDir) => {
     const naCriteria = computeNaCriteria(data.axe_results ?? data.axeResults ?? [], { includeExtended: false });
-    const html = buildDashboardHtml({ jobId: data.jobId, channel: data.channel, scores: data.scores, findings: data.findings, complementaryFindings: data.complementaryFindings, naCriteria, urls: data.urls, axeResults: data.axe_results ?? data.axeResults ?? [], includeExtended: data.includeExtended ?? false });
+    const html = buildDashboardHtml({ jobId: data.jobId, channel: data.channel, scores: data.scores, findings: data.findings, complementaryFindings: data.complementaryFindings, naCriteria, urls: data.urls, axeResults: data.axe_results ?? data.axeResults ?? [], includeExtended: data.includeExtended ?? false, keyboardResults: data.keyboardResults ?? [] });
     const filePath = await writeTextFile(outputDir, 'dashboard.html', html);
     return [filePath];
   },

@@ -81,16 +81,6 @@ test('buildDashboardHtml muestra el resultado por página con el path (sin módu
   assert.doesNotMatch(html, /Distribución por módulo/);
 });
 
-test('buildDashboardHtml muestra conteos reales cuando hay findings de visual_audit/ux_review', () => {
-  const findings = [
-    { wcag_criterion: '1.4.3', wcag_description: 'Contraste', in_scope: 'onti', severity: 'serious', occurrences: 1, source: 'visual_audit' },
-    { wcag_criterion: '3.3.1', wcag_description: 'Identificación de errores', in_scope: 'onti', severity: 'moderate', occurrences: 1, source: 'ux_review' }
-  ];
-  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: baseScores(), findings });
-  assert.doesNotMatch(html, /No se ejecutó la revisión visual/);
-  assert.match(html, /Revisión visual<\/td><td>1<\/td>/);
-});
-
 test('analyzedTarget: una URL, varias del mismo sitio y carpeta local', () => {
   assert.deepEqual(analyzedTarget(['https://banco.test/cuentas']), { text: 'https://banco.test/cuentas', href: 'https://banco.test/cuentas' });
   assert.deepEqual(analyzedTarget(['https://banco.test/', 'https://banco.test/cuentas']), { text: 'https://banco.test', href: 'https://banco.test' });
@@ -168,4 +158,35 @@ test('buildDashboardHtml incluye el anexo de reglas evaluadas por página cuando
   const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: sectionScores(), findings: [NOK_111], axeResults: [PAGE] });
   assert.match(html, /Reglas evaluadas por página/);
   assert.match(html, /\/home-banking\/pago[\s\S]*?<td>0<\/td><td>0<\/td><td>1<\/td><td>1<\/td><td>1<\/td>/);
+});
+
+const KB = (estado2_4_7) => ({
+  url: PAGE.url,
+  criteria: {
+    '2.1.2': { estado: 'sin_indicios', paradas: [], motivo: 'El foco recorrió 5 elemento(s) sin quedar encerrado', fuente: 'reglas' },
+    '2.4.3': { estado: 'sin_indicios', paradas: [], motivo: 'Orden lógico', fuente: 'Agente' },
+    '2.4.7': { estado: estado2_4_7, paradas: [2], motivo: 'Ingresar no muestra indicador de foco', fuente: 'Agente' },
+    '3.2.1': { estado: 'sin_indicios', paradas: [], motivo: 'Sin cambios', fuente: 'reglas' }
+  }
+});
+
+test('buildDashboardHtml muestra la sección de pruebas de teclado con puntaje y estado por página', () => {
+  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: sectionScores(), findings: [NOK_111], keyboardResults: [KB('con_indicios')] });
+  assert.match(html, /Pruebas de teclado del Agente/);
+  assert.match(html, /No afecta el compliance/);
+  assert.match(html, /75%/);
+  assert.match(html, /\/home-banking\/pago[\s\S]*?Sin indicios[\s\S]*?Sin indicios[\s\S]*?Con indicios[\s\S]*?Sin indicios/);
+  assert.match(html, /Ingresar no muestra indicador de foco/);
+});
+
+test('buildDashboardHtml suma la evidencia de teclado al motivo de los criterios a validar', () => {
+  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: sectionScores(), findings: [NOK_111], keyboardResults: [KB('con_indicios')] });
+  assert.match(html, /2\.4\.7[\s\S]*?Requiere tecnología asistiva: navegación solo con teclado · Prueba de teclado del Agente: con indicios en 1 de 1 página/);
+  assert.match(html, /2\.1\.2[\s\S]*?Prueba de teclado del Agente: sin indicios en 1 página/);
+});
+
+test('buildDashboardHtml sin pruebas de teclado lo dice y no inventa evidencia', () => {
+  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: sectionScores(), findings: [NOK_111] });
+  assert.match(html, /No se ejecutaron las pruebas de teclado del Agente/);
+  assert.doesNotMatch(html, /Prueba de teclado del Agente:/);
 });

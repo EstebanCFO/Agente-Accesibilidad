@@ -4,6 +4,7 @@ import { splitFindings } from '../classification/finding-sources.js';
 import { pageLabels, analyzedTarget } from './report-helpers.js';
 import { computeWcagSection } from '../classification/wcag-section.js';
 import { summarizeRuleChecks } from '../classification/rule-checks.js';
+import { computeKeyboardScore, KEYBOARD_CRITERIA } from '../keyboard/keyboard-criteria.js';
 
 // El Dashboard Ejecutivo es para el cliente/directorio - no menciona "ONTI" (la norma técnica de
 // origen), hace referencia a la Circular BCRA en su lugar. score-compliance.json (score-
@@ -114,13 +115,13 @@ function ontiComplianceSummaryHtml(summary) {
 }
 
 /** Tabla con cada criterio "a validar" o "no aplica" y el motivo, para que el lector sepa por qué. */
-function pendingCriteriaHtml(criteriaStatus) {
+function pendingCriteriaHtml(criteriaStatus, keyboardResults = []) {
   const rows = criteriaStatus.filter((c) => c.status === 'a_validar' || c.status === 'no_aplica');
   if (rows.length === 0) return '<p class="empty">Todos los criterios se verificaron automáticamente.</p>';
   return `<table>
     <thead><tr><th>Criterio</th><th>Nivel</th><th>Estado</th><th>Motivo</th></tr></thead>
     <tbody>
-      ${rows.map((c) => `<tr><td>${escapeHtml(c.wcag_criterion)} ${escapeHtml(c.description)}</td><td>${escapeHtml(c.level)}</td><td>${STATUS_LABEL[c.status]}</td><td>${escapeHtml(c.reason.text)}</td></tr>`).join('\n      ')}
+      ${rows.map((c) => `<tr><td>${escapeHtml(c.wcag_criterion)} ${escapeHtml(c.description)}</td><td>${escapeHtml(c.level)}</td><td>${STATUS_LABEL[c.status]}</td><td>${escapeHtml([c.reason.text, keyboardEvidence(c.wcag_criterion, keyboardResults)].filter(Boolean).join(' · '))}</td></tr>`).join('\n      ')}
     </tbody>
   </table>`;
 }
@@ -195,20 +196,36 @@ function statTile({ label, value, sublabel = '' }) {
   </div>`;
 }
 
-function visualUxSectionHtml(findings) {
-  const visualCount = findings.filter((f) => f.source === 'visual_audit').length;
-  const uxCount = findings.filter((f) => f.source === 'ux_review').length;
-  if (visualCount === 0 && uxCount === 0) {
-    return '<p class="empty">No se ejecutó la revisión visual ni la de UX del agente en esta auditoría.</p>';
-  }
-  const note = '<p class="muted">Hallazgos de la revisión visual y de UX agéntica. Son orientativos: el puntaje y los demás gráficos se calculan solo con los resultados del agente.</p>';
-  return `<table>
-    <thead><tr><th>Fuente</th><th>Hallazgos</th></tr></thead>
-    <tbody>
-      <tr><td>Revisión visual</td><td>${visualCount}</td></tr>
-      <tr><td>Revisión de UX y navegación</td><td>${uxCount}</td></tr>
-    </tbody>
-  </table>${note}`;
+const ESTADO_TECLADO = { sin_indicios: 'Sin indicios', con_indicios: 'Con indicios', no_evaluable: 'No evaluable' };
+
+/** Evidencia de las pruebas de teclado para un criterio (null si no se probó en ninguna página). */
+function keyboardEvidence(criterionId, keyboardResults) {
+  const evaluables = keyboardResults.map((r) => r.criteria?.[criterionId]?.estado).filter((e) => e === 'sin_indicios' || e === 'con_indicios');
+  if (evaluables.length === 0) return null;
+  const con = evaluables.filter((e) => e === 'con_indicios').length;
+  const paginas = evaluables.length === 1 ? 'página' : 'páginas';
+  return con > 0
+    ? `Prueba de teclado del Agente: con indicios en ${con} de ${evaluables.length} ${paginas}`
+    : `Prueba de teclado del Agente: sin indicios en ${evaluables.length} ${paginas}`;
+}
+
+/** Sección 3 del informe: resultado del recorrido con Tab por página, con puntaje propio. */
+function keyboardSectionHtml(keyboardResults) {
+  if (keyboardResults.length === 0) return '<p class="empty">No se ejecutaron las pruebas de teclado del Agente en esta auditoría.</p>';
+  const k = computeKeyboardScore(keyboardResults);
+  const labels = pageLabels(keyboardResults.map((r) => r.url));
+  const motivos = keyboardResults.flatMap((r) => KEYBOARD_CRITERIA
+    .filter((c) => r.criteria[c.id].estado === 'con_indicios')
+    .map((c) => `<li><strong>${escapeHtml(labels.get(r.url))}</strong> · ${c.id} ${escapeHtml(c.label)}: ${escapeHtml(r.criteria[c.id].motivo)}</li>`));
+  const rows = keyboardResults.map((r) => `<tr><td title="${escapeHtml(r.url)}">${escapeHtml(labels.get(r.url))}</td>${
+    KEYBOARD_CRITERIA.map((c) => `<td>${ESTADO_TECLADO[r.criteria[c.id].estado] ?? '—'}</td>`).join('')}</tr>`);
+  return `<p><strong>${k.score === null ? '—' : `${k.score}%`}</strong> de los pares página×criterio sin indicios · ${k.con_indicios} con indicios · ${k.sin_indicios} sin indicios${k.no_evaluable ? ` · ${k.no_evaluable} no evaluables` : ''}</p>
+  <table>
+    <thead><tr><th>Página</th>${KEYBOARD_CRITERIA.map((c) => `<th>${c.id} ${escapeHtml(c.label)}</th>`).join('')}</tr></thead>
+    <tbody>${rows.join('')}</tbody>
+  </table>
+  ${motivos.length ? `<ul>${motivos.join('')}</ul>` : ''}
+  <p class="muted">Recorrido con Tab de cada página, interpretado por el Agente. "Con indicios" requiere validación humana: estos criterios siguen "a validar" en el compliance WCAG.</p>`;
 }
 
 /**
@@ -277,11 +294,10 @@ function levelCounts(criteriaStatus, level) {
 }
 
 // naCriteria se mantiene en la firma por compatibilidad: "No aplica" sale de la Sección 1.
-export function buildDashboardHtml({ jobId, channel, scores, findings: allFindings, complementaryFindings = [], naCriteria = [], urls, axeResults = [], includeExtended = false }) {
+export function buildDashboardHtml({ jobId, channel, scores, findings: allFindings, complementaryFindings = [], naCriteria = [], urls, axeResults = [], includeExtended = false, keyboardResults = [] }) {
   const { summary, extended_22: extended22, by_url: byUrl } = scores;
   // Todo lo que se cuenta sale de axe-core; lo del Agente solo se muestra como complementario.
-  const { primary: findings, complementary } = splitFindings(allFindings);
-  const agentFindings = [...complementary, ...complementaryFindings];
+  const { primary: findings } = splitFindings(allFindings);
   const sevCounts = severityCounts(findings);
   // Misma fuente que la tarjeta "Compliance WCAG" del panel.
   const section = scores.wcag_section ?? computeWcagSection(allFindings, { axeResults, includeExtended });
@@ -391,12 +407,12 @@ export function buildDashboardHtml({ jobId, channel, scores, findings: allFindin
         <section class="card">
           <h2>Criterios a validar y no aplicables</h2>
           <p class="muted">Por qué cada uno de estos criterios no se pudo dar como OK o NOK en esta auditoría.</p>
-          ${pendingCriteriaHtml(criteriaStatus)}
+          ${pendingCriteriaHtml(criteriaStatus, keyboardResults)}
         </section>
 
         <section class="card">
-          <h2>Análisis complementario del Agente <span class="pill">No afecta el puntaje</span></h2>
-          ${visualUxSectionHtml(agentFindings)}
+          <h2>Pruebas de teclado del Agente <span class="pill">No afecta el compliance</span></h2>
+          ${keyboardSectionHtml(keyboardResults)}
         </section>
 
         ${extendedBlockHtml(extended22)}

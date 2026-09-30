@@ -104,7 +104,7 @@ export function buildConsolidatedReportHtml(data) {
   const includeExtended = data.includeExtended ?? false;
 
   const sections = [
-    { key: 'dashboard', title: 'Score de cumplimiento inicial', html: buildDashboardHtml({ jobId: data.jobId, channel: data.channel, scores: data.scores, findings, complementaryFindings, naCriteria, urls: data.urls, axeResults, includeExtended }) },
+    { key: 'dashboard', title: 'Score de cumplimiento inicial', html: buildDashboardHtml({ jobId: data.jobId, channel: data.channel, scores: data.scores, findings, complementaryFindings, naCriteria, urls: data.urls, axeResults, includeExtended, keyboardResults: data.keyboardResults ?? [] }) },
     { key: 'inventario', title: 'Inventario de hallazgos', html: buildInventarioHtml({ jobId: data.jobId, findings, complementaryFindings, urls }) },
     { key: 'matriz', title: 'Matriz de criticidad WCAG 2.0 AA', html: buildMatrizHtml({
       jobId: data.jobId, channel: data.channel,

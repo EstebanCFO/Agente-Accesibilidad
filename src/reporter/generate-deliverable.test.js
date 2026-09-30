@@ -207,7 +207,7 @@ test('generateDeliverable("dashboard") escribe dashboard.html con las secciones 
   assert.match(html, /Cumplimiento por Principio y Pauta WCAG/);
   assert.match(html, /Resultado por página/);
   assert.match(html, /\/home-banking\/pago/);
-  assert.match(html, /No se ejecutó la revisión visual/);
+  assert.match(html, /No se ejecutaron las pruebas de teclado del Agente/);
 });
 
 test('generateDeliverable("dashboard") usa axe_results: sección WCAG y anexo de reglas por página', async () => {
@@ -219,6 +219,17 @@ test('generateDeliverable("dashboard") usa axe_results: sección WCAG y anexo de
   const html = await readFile(file, 'utf8');
   assert.match(html, /1 OK · 0 NOK/);
   assert.match(html, /Reglas evaluadas por página/);
+});
+
+test('generateDeliverable("dashboard") incluye las pruebas de teclado que llegan en keyboardResults', async () => {
+  const outputDir = await mkdtemp(path.join(tmpdir(), 'f1-deliverable-'));
+  const estado = (e) => ({ estado: e, paradas: [], motivo: 'm', fuente: 'reglas' });
+  const keyboardResults = [{ url: 'https://a.test/', criteria: { '2.1.2': estado('sin_indicios'), '2.4.3': estado('sin_indicios'), '2.4.7': estado('con_indicios'), '3.2.1': estado('sin_indicios') } }];
+  const scores = { summary: { total_urls_evaluated: 1 }, extended_22: null, by_url: [], by_module: [] };
+  const [file] = await generateDeliverable('dashboard', { jobId: 'job-7', channel: 'home_banking', scores, findings: [], keyboardResults }, { outputDir });
+  const html = await readFile(file, 'utf8');
+  assert.match(html, /75%/);
+  assert.doesNotMatch(html, /No se ejecutaron las pruebas de teclado/);
 });
 
 test('generateDeliverable("dashboard-consolidado") escribe score-consolidado.json + dashboard-consolidado.html', async () => {
