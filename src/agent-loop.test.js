@@ -103,3 +103,13 @@ test('se detiene con status cancelled sin sobrescribirlo cuando el job fue cance
   assert.equal(job.status, 'cancelled');
   assert.equal(anthropicClient.calls, 0);
 });
+
+test('el prompt inicial describe el resultado como conteo, sin umbral de conformidad', async () => {
+  const { jobStore, toolRegistry } = setup();
+  let firstRequest;
+  const anthropicClient = { messages: { create: async (req) => { firstRequest ??= req; return { content: [{ type: 'text', text: 'fin' }] }; } } };
+  await new AgentLoop({ anthropicClient, toolRegistry, jobStore, maxIterations: 1 }).run('job-1');
+  const prompt = JSON.stringify(firstRequest.messages[0].content);
+  assert.doesNotMatch(prompt, /\d+\/38/);
+  assert.match(prompt, /OK \/ NOK \/ a validar/);
+});

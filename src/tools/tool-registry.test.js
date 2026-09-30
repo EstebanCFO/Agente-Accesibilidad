@@ -234,3 +234,13 @@ test('keyboard_review rechaza un keyboard_path fuera del directorio de capturas 
     /directorio de capturas/
   );
 });
+
+test('calculate_score ya no acepta umbral y devuelve conteos', async () => {
+  const { registry } = await setup();
+  const schema = registry.schemas.find((s) => s.name === 'calculate_score');
+  assert.equal(schema.input_schema.properties.conformance_threshold, undefined);
+  assert.doesNotMatch(schema.description, /%/);
+  const result = await registry.execute('calculate_score', { classified_findings: [], axe_results: [] }, 'job-1');
+  assert.equal(result.summary.a_validar, 38);
+  assert.equal('onti_conformance' in result.summary, false);
+});

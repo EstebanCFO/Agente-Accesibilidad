@@ -10,7 +10,6 @@ function buildDefaults() {
       baseline: 'onti_2019',
       levels: ['A', 'AA'],
       base_tags: ['wcag2a', 'wcag2aa'],
-      conformance_threshold: 30,
       extended_22: false,
       extended_22_tags: ['wcag21a', 'wcag21aa', 'wcag22aa']
     },
@@ -70,20 +69,37 @@ export function validateConfig(rawConfig) {
     return { valid: false, errors, config: null };
   }
 
+  // Campos retirados (spec 2026-09-30): el resultado ya no tiene umbral de conformidad y la
+  // revisión visual/UX se reemplazó por keyboard_review. Una config vieja sigue siendo válida:
+  // esos campos se ignoran con un aviso.
+  const warnings = [];
+  const rawWcag = { ...(raw.wcag || {}) };
+  if ('conformance_threshold' in rawWcag) {
+    delete rawWcag.conformance_threshold;
+    warnings.push('wcag.conformance_threshold se ignora: el resultado es un conteo OK/NOK/a validar, sin umbral de conformidad');
+  }
+  const rawSkills = { ...(raw.skills || {}) };
+  for (const retired of ['visual_audit', 'ux_compliance_review']) {
+    if (retired in rawSkills) {
+      delete rawSkills[retired];
+      warnings.push(`skills.${retired} se ignora: se reemplazó por keyboard_review`);
+    }
+  }
+
   const defaults = buildDefaults();
   const config = {
     job_id: raw.job_id || randomUUID(),
     description: raw.description || '',
     target: { channel, mode, root_url: rootUrl ?? null, urls: urls ?? [] },
     auth: deepMerge(defaults.auth, raw.auth),
-    wcag: deepMerge(defaults.wcag, raw.wcag),
+    wcag: deepMerge(defaults.wcag, rawWcag),
     scope: deepMerge(defaults.scope, raw.scope),
-    skills: deepMerge(defaults.skills, raw.skills),
+    skills: deepMerge(defaults.skills, rawSkills),
     output: deepMerge(defaults.output, raw.output),
     agent: deepMerge(defaults.agent, raw.agent)
   };
 
-  return { valid: true, errors: [], config };
+  return { valid: true, errors: [], warnings, config };
 }
 
 const REDACTED = '[REDACTED]';

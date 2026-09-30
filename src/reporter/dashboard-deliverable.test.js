@@ -25,10 +25,13 @@ test('buildDashboardHtml omite el bloque de capa extendida cuando extended_22 es
 });
 
 test('buildDashboardHtml incluye el bloque de capa extendida rotulado como no exigido', () => {
-  const scores = baseScores({ extended_22: { criteria_evaluated: 18, criteria_compliant: 18, compliance_percentage: 100, by_criterion: [] } });
+  const scores = baseScores({ extended_22: { total: 18, ok: 3, nok: 1, a_validar: 14 } });
   const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores, findings: [] });
   assert.match(html, /Capa extendida WCAG 2\.2/);
   assert.match(html, /No exigida por la Circular BCRA/);
+  assert.match(html, /3 OK · 1 NOK/);
+  assert.match(html, /14 a validar \(de 18\)/);
+  assert.doesNotMatch(html, /Criterios conformes|NaN|undefined%/);
 });
 
 test('buildDashboardHtml no menciona "ONTI" en ningún lado (el dashboard hace referencia a la Circular BCRA)', () => {

@@ -255,10 +255,9 @@ function extendedBlockHtml(extended22) {
   if (!extended22) return '';
   return `<section class="card">
     <h2>Capa extendida WCAG 2.2 <span class="pill">No exigida por la Circular BCRA</span></h2>
-    <p class="muted">Score separado — no incide en el compliance de la Circular BCRA de arriba.</p>
+    <p class="muted">Conteo separado — no incide en el compliance de la Circular BCRA de arriba.</p>
     <div class="stat-row">
-      ${statTile({ label: 'Criterios conformes', value: `${extended22.criteria_compliant}/${extended22.criteria_evaluated}` })}
-      ${statTile({ label: 'Compliance', value: `${extended22.compliance_percentage}%` })}
+      ${statTile({ label: 'Criterios WCAG 2.1/2.2', value: `${extended22.ok} OK · ${extended22.nok} NOK`, sublabel: `${extended22.a_validar} a validar (de ${extended22.total})` })}
     </div>
   </section>`;
 }

@@ -178,7 +178,7 @@ test('generateDeliverable("dashboard") escribe dashboard.html con las secciones 
       onti_compliance_percentage: 76.32, onti_conformance: false, conformance_threshold: 30,
       score_level_a: 80, score_level_aa: 69.23
     },
-    extended_22: { criteria_evaluated: 18, criteria_compliant: 17, compliance_percentage: 94.44, by_criterion: [] },
+    extended_22: { total: 18, ok: 3, nok: 1, a_validar: 14 },
     by_url: [
       { url: 'https://a.test/home-banking/pago', module: 'home-banking', onti_compliance_percentage: 76.32, violations: 3, incomplete: 0 },
       { url: 'https://b.test', module: 'raiz', onti_compliance_percentage: 100, violations: 0, incomplete: 0 }

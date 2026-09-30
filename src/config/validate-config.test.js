@@ -10,7 +10,7 @@ test('acepta un config url_list mínimo y aplica defaults', () => {
   assert.deepEqual(errors, []);
   assert.equal(config.wcag.baseline, 'onti_2019');
   assert.deepEqual(config.wcag.levels, ['A', 'AA']);
-  assert.equal(config.wcag.conformance_threshold, 30);
+  assert.equal('conformance_threshold' in config.wcag, false);
   assert.equal(config.wcag.extended_22, false);
   assert.equal(config.scope.max_urls, 100);
   assert.equal(config.scope.parallel_workers, 3);
@@ -19,15 +19,20 @@ test('acepta un config url_list mínimo y aplica defaults', () => {
   assert.match(config.job_id, /^[0-9a-f-]{36}$/);
 });
 
-test('respeta job_id y conformance_threshold provistos por el operador', () => {
-  const { valid, config } = validateConfig({
+test('respeta job_id; ignora con aviso el umbral y los skills retirados de configs viejas', () => {
+  const { valid, config, warnings } = validateConfig({
     job_id: 'job-fijo-123',
     target: { channel: 'app_ios', mode: 'url_list', urls: ['https://app.test/home'] },
-    wcag: { conformance_threshold: 32 }
+    wcag: { conformance_threshold: 32 },
+    skills: { visual_audit: true, ux_compliance_review: false }
   });
   assert.equal(valid, true);
   assert.equal(config.job_id, 'job-fijo-123');
-  assert.equal(config.wcag.conformance_threshold, 32);
+  assert.equal('conformance_threshold' in config.wcag, false);
+  assert.deepEqual(config.skills, { keyboard_review: true, generate_remediation_plan: true });
+  assert.equal(warnings.length, 3);
+  assert.match(warnings.join(' '), /conformance_threshold/);
+  assert.match(warnings.join(' '), /visual_audit/);
 });
 
 test('rechaza config sin target.channel', () => {
