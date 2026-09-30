@@ -1,0 +1,13 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Trampa de teclado</title>
+<style>input,button{display:block;margin:20px}</style></head>
+<body>
+<button>Antes</button>
+<input id="a" aria-label="Campo A"><input id="b" aria-label="Campo B">
+<button>Después</button>
+<script>
+  // Trampa: Tab en B vuelve a A y Shift+Tab en A vuelve a B.
+  const a = document.getElementById('a'), b = document.getElementById('b');
+  b.addEventListener('keydown', (e) => { if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); a.focus(); } });
+  a.addEventListener('keydown', (e) => { if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); b.focus(); } });
+</script>
+</body></html>
