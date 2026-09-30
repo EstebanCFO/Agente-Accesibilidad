@@ -1,75 +1,53 @@
-import { ontiCriteria, extendedCriteria } from './wcag-map.js';
 import { classifyModule } from './module-classifier.js';
-import { computeNaCriteria } from './na-criteria.js';
-import { splitFindings } from './finding-sources.js';
 import { computeWcagSection } from './wcag-section.js';
 import { computeBestPractices } from './best-practices.js';
 
-function round2(n) {
-  return Math.round(n * 100) / 100;
+/** Solo axe-core participa (un finding sin source viene de classify-findings). */
+function isAxeFinding(finding) {
+  return !finding?.source || finding.source === 'axe-core';
 }
 
-function percentage(compliant, total) {
-  if (total === 0) return 0;
-  return round2((compliant / total) * 100);
+function counts(criteria) {
+  const n = (status) => criteria.filter((c) => c.status === status).length;
+  return { total: criteria.length - n('no_aplica'), ok: n('ok'), nok: n('nok'), a_validar: n('a_validar'), no_aplica: n('no_aplica') };
+}
+
+function levelCounts(criteria, level) {
+  const { total, ok, nok, a_validar: aValidar } = counts(criteria.filter((c) => c.level === level));
+  return { total, ok, nok, a_validar: aValidar };
 }
 
 /**
- * Calcula compliance_scores (SPEC §8.1) a partir de classified_findings. axeResults es opcional
- * y se usa para: (1) saber qué URLs se escanearon de verdad (incluidas las 100% conformes, que
- * no generan ningún finding), (2) las cifras crudas de violations/incomplete por URL, y (3)
- * determinar qué criterios ONTI son N/A (computeNaCriteria) - sin él, no hay forma de saber que
- * un criterio nunca tuvo contenido aplicable en ningún lado.
+ * compliance_scores del job (SPEC §8.1, spec 2026-09-30). Sin veredicto, umbral ni porcentaje de
+ * cumplimiento: el resultado es un conteo OK / NOK / a validar / no aplica, tomado de la Sección 1
+ * (computeWcagSection) — la misma fuente que la tarjeta del panel y el Score de cumplimiento.
+ *   summary     - los 38 criterios de la Circular BCRA (WCAG 2.0 A+AA), total y por nivel;
+ *   extended_22 - la capa WCAG 2.1/2.2 (solo con includeExtended), también como conteo;
+ *   by_url / by_module - criterios con problemas confirmados por página / módulo;
+ *   wcag_section / best_practices - Secciones 1 y 2 completas.
+ * axeResults es opcional: sin él no se sabe qué reglas pasaron (todo queda "a validar") y
+ * total_urls_evaluated se aproxima con las URLs de los hallazgos.
  */
-export function calculateScore(classifiedFindings, {
-  axeResults = [],
-  conformanceThreshold = 30,
-  includeExtended = false
-} = {}) {
-  // Solo axe-core puntúa: los hallazgos de la revisión del Agente son complementarios.
-  const findings = splitFindings(classifiedFindings || []).primary;
-  const ontiFindings = findings.filter((f) => f.in_scope === 'onti');
-  const extendedFindings = findings.filter((f) => f.in_scope === 'extended_22');
+export function calculateScore(classifiedFindings, { axeResults = [], includeExtended = false } = {}) {
+  const findings = (classifiedFindings || []).filter(isAxeFinding);
+  const confirmedOnti = findings.filter((f) => f.in_scope === 'onti' && (f.review_status ?? 'confirmado') === 'confirmado');
+  const wcagSection = computeWcagSection(classifiedFindings, { axeResults, includeExtended });
+  const onti = wcagSection.by_criterion.filter((c) => c.in_scope === 'onti');
+  const extended = wcagSection.by_criterion.filter((c) => c.in_scope === 'extended_22');
 
-  const violatedOntiCriteria = new Set(ontiFindings.map((f) => f.wcag_criterion));
-
-  // Los criterios N/A del cuerpo ONTI se calculan siempre con includeExtended:false - la capa
-  // extendida no tiene umbral regulatorio propio, no recibe este ajuste de denominador. Un
-  // criterio con un finding real de axe-core no puede ser N/A aunque axe lo haya marcado
-  // inapplicable en otra página. Los hallazgos del Agente (visual/UX) no participan del puntaje.
-  const naOntiCriteriaRaw = computeNaCriteria(axeResults, { includeExtended: false });
-  const naSet = new Set(naOntiCriteriaRaw.filter((c) => !violatedOntiCriteria.has(c)));
-  const evaluatedOntiCriteria = ontiCriteria.filter((c) => !naSet.has(c.wcag_criterion));
-
-  const ontiCriteriaCompliant = evaluatedOntiCriteria.length - violatedOntiCriteria.size;
-
-  const levelACriteria = evaluatedOntiCriteria.filter((c) => c.level === 'A');
-  const levelAACriteria = evaluatedOntiCriteria.filter((c) => c.level === 'AA');
-  const scoreForCriteria = (criteria) => {
-    const compliant = criteria.filter((c) => !violatedOntiCriteria.has(c.wcag_criterion)).length;
-    return percentage(compliant, criteria.length);
-  };
-
-  const effectiveConformanceThreshold = evaluatedOntiCriteria.length === ontiCriteria.length
-    ? conformanceThreshold
-    : Math.round((conformanceThreshold / ontiCriteria.length) * evaluatedOntiCriteria.length);
-
-  const scannedUrls = axeResults.length > 0
-    ? [...new Set(axeResults.filter((r) => r && !r.error).map((r) => r.url))]
+  const scanned = axeResults.filter((r) => r && !r.error);
+  const scannedUrls = scanned.length > 0
+    ? [...new Set(scanned.map((r) => r.url))]
     : [...new Set(findings.flatMap((f) => f.affected_urls || []))];
-
-  const axeResultByUrl = new Map(axeResults.filter((r) => r && !r.error).map((r) => [r.url, r]));
+  const axeResultByUrl = new Map(scanned.map((r) => [r.url, r]));
+  const problemsIn = (urls) => new Set(confirmedOnti.filter((f) => (f.affected_urls || []).some((u) => urls.has(u))).map((f) => f.wcag_criterion)).size;
 
   const byUrl = scannedUrls.map((url) => {
     const axeResult = axeResultByUrl.get(url);
-    const violatedForUrl = new Set(
-      ontiFindings.filter((f) => (f.affected_urls || []).includes(url)).map((f) => f.wcag_criterion)
-    );
-    const compliantForUrl = evaluatedOntiCriteria.length - violatedForUrl.size;
     return {
       url,
       module: classifyModule(url),
-      onti_compliance_percentage: percentage(compliantForUrl, evaluatedOntiCriteria.length),
+      criterios_con_problemas: problemsIn(new Set([url])),
       violations: axeResult?.violation_count ?? 0,
       incomplete: axeResult?.incomplete_count ?? 0
     };
@@ -80,62 +58,26 @@ export function calculateScore(classifiedFindings, {
     if (!urlsByModule.has(entry.module)) urlsByModule.set(entry.module, []);
     urlsByModule.get(entry.module).push(entry);
   }
+  const byModule = [...urlsByModule.entries()].map(([module, entries]) => ({
+    module,
+    url_count: entries.length,
+    criterios_con_problemas: problemsIn(new Set(entries.map((e) => e.url))),
+    violations: entries.reduce((sum, e) => sum + e.violations, 0),
+    incomplete: entries.reduce((sum, e) => sum + e.incomplete, 0)
+  }));
 
-  const byModule = [...urlsByModule.entries()].map(([module, entries]) => {
-    const moduleUrls = new Set(entries.map((e) => e.url));
-    const violatedForModule = new Set(
-      ontiFindings
-        .filter((f) => (f.affected_urls || []).some((url) => moduleUrls.has(url)))
-        .map((f) => f.wcag_criterion)
-    );
-    const compliantForModule = evaluatedOntiCriteria.length - violatedForModule.size;
-    return {
-      module,
-      url_count: entries.length,
-      onti_compliance_percentage: percentage(compliantForModule, evaluatedOntiCriteria.length),
-      violations: entries.reduce((sum, e) => sum + e.violations, 0),
-      incomplete: entries.reduce((sum, e) => sum + e.incomplete, 0)
-    };
-  });
-
-  let extended22 = null;
-  if (includeExtended) {
-    const violatedExtended = new Set(extendedFindings.map((f) => f.wcag_criterion));
-    const compliant = extendedCriteria.length - violatedExtended.size;
-    extended22 = {
-      criteria_evaluated: extendedCriteria.length,
-      criteria_compliant: compliant,
-      compliance_percentage: percentage(compliant, extendedCriteria.length),
-      by_criterion: extendedCriteria.map((c) => ({
-        wcag_criterion: c.wcag_criterion,
-        level: c.level,
-        source: c.source,
-        description: c.description,
-        compliant: !violatedExtended.has(c.wcag_criterion)
-      }))
-    };
-  }
-
+  const { no_aplica: _na, ...extendedCounts } = counts(extended);
   return {
     summary: {
       total_urls_evaluated: scannedUrls.length,
-      onti_criteria_evaluated: evaluatedOntiCriteria.length,
-      onti_criteria_na: naSet.size,
-      onti_criteria_compliant: ontiCriteriaCompliant,
-      onti_compliance_percentage: percentage(ontiCriteriaCompliant, evaluatedOntiCriteria.length),
-      onti_conformance: evaluatedOntiCriteria.length > 0 && ontiCriteriaCompliant >= effectiveConformanceThreshold,
-      conformance_threshold: conformanceThreshold,
-      effective_conformance_threshold: effectiveConformanceThreshold,
-      score_level_a: scoreForCriteria(levelACriteria),
-      score_level_a_evaluated: levelACriteria.length,
-      score_level_aa: scoreForCriteria(levelAACriteria),
-      score_level_aa_evaluated: levelAACriteria.length
+      ...counts(onti),
+      level_a: levelCounts(onti, 'A'),
+      level_aa: levelCounts(onti, 'AA')
     },
-    extended_22: extended22,
+    extended_22: includeExtended ? extendedCounts : null,
     by_url: byUrl,
     by_module: byModule,
-    // Secciones del informe (spec 2026-09-30). Aditivo: los campos de arriba se retiran en el Plan C.
-    wcag_section: computeWcagSection(classifiedFindings, { axeResults, includeExtended }),
+    wcag_section: wcagSection,
     best_practices: computeBestPractices(axeResults)
   };
 }
