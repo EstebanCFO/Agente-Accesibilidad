@@ -205,3 +205,29 @@ Además del demo, el agente (`src/agent-loop.js` + `src/tools/tool-registry.js`)
    código de `wcag-audit-patterns` para la columna "Cómo corregir".
 3. Hoja de contactos con el recorrido dibujado sobre la captura (enfoque 2), si hace falta.
 4. Veredicto de cumplimiento tras la validación humana.
+
+## Enmienda 2026-09-30 — informe alineado con el panel (adelanta parte del Plan C)
+
+Motivo: el panel ya mostraba el cálculo nuevo ("8 OK · 5 NOK · 24 a validar (de 37)") mientras
+el informe "Score de cumplimiento inicial" seguía diciendo "32/37 CONFORME" (los 24 sin
+verificar contados como conformes) y sus tablas usaban una tercera lógica propia.
+
+- **Única fuente**: `computeWcagSection` agrega `reason: { code, text }` por criterio:
+  - `ok` → `verificado`: "Verificado automáticamente, sin problemas".
+  - `nok` → `con_problemas`: "Problemas en N página(s)".
+  - `a_validar` → `indeterminado` (axe `incomplete`: "El agente no pudo determinarlo
+    automáticamente"), `requiere_asistiva` / `requiere_manual` (criterio sin reglas automáticas;
+    método de `MANUAL_REVIEW`, que se mueve a `src/classification/manual-review.js`) o
+    `sin_elementos` (tiene reglas, pero ninguna encontró elementos en las N páginas — decisión
+    del usuario: sigue "A validar", con motivo).
+  - `no_aplica` → `sin_multimedia`: "No se encontró audio ni video en las N página(s) evaluadas".
+- **Informe "Score de cumplimiento inicial"** (dashboard, y por lo tanto el PDF): bloque superior
+  con los mismos números y rótulo que la tarjeta del panel; **sin** "CONFORME / NO CONFORME",
+  **sin** umbral (decisión del usuario) y sin porcentaje. Nivel A/AA como conteos. Tablas por
+  pauta y de los 38 criterios con los mismos estados; tabla nueva "Criterios a validar y no
+  aplicables" con motivo por criterio; anexo "Reglas evaluadas por página".
+- **Portada del PDF y resumen del informe narrativo**: mismos conteos, sin veredicto.
+- **Log por página del demo**: distingue reglas y criterios —
+  "WCAG — X reglas con problemas, Y a revisar, Z aprobadas (N criterios con verificación) ·
+  Buenas prácticas — A a mejorar, B cumplen".
+- Quedan en el Plan C: matriz por página, consolidado multi-job, agente/config, SPEC v0.4.
