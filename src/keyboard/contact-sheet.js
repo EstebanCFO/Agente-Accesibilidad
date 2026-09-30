@@ -45,7 +45,8 @@ export async function renderContactSheet(context, stops = []) {
   if (stops.length === 0) return null;
   const page = await context.newPage();
   try {
-    await page.setViewportSize({ width: SHEET_WIDTH, height: 800 });
+    // Alto mínimo: la captura fullPage toma el alto del contenido, sin blanco sobrante.
+    await page.setViewportSize({ width: SHEET_WIDTH, height: 50 });
     await page.setContent(buildContactSheetHtml(stops), { waitUntil: 'load' });
     const height = await page.evaluate(() => document.documentElement.scrollHeight);
     const buffer = await page.screenshot({

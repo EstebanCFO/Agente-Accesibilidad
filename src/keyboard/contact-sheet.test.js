@@ -39,3 +39,27 @@ test('renderContactSheet devuelve un JPEG en base64, o null sin paradas', async 
     await browser.close();
   }
 });
+
+// Alto de un JPEG leyendo su marcador SOF (sin dependencias).
+function jpegHeight(base64) {
+  const b = Buffer.from(base64, 'base64');
+  for (let i = 2; i < b.length;) {
+    const marker = b[i + 1];
+    const len = b.readUInt16BE(i + 2);
+    if (marker >= 0xc0 && marker <= 0xc3) return b.readUInt16BE(i + 5);
+    i += 2 + len;
+  }
+  return null;
+}
+
+test('renderContactSheet recorta la imagen al contenido (sin blanco sobrante)', async () => {
+  const browser = await chromium.launch();
+  try {
+    const context = await browser.newContext();
+    const jpeg = await renderContactSheet(context, [stop(1, 'Ingresar')]);
+    assert.ok(jpegHeight(jpeg) < 300, `alto ${jpegHeight(jpeg)}`);
+    await context.close();
+  } finally {
+    await browser.close();
+  }
+});
