@@ -39,6 +39,13 @@ export const REPORT_FINDINGS_TOOL = {
  * Texto con los 38 criterios ONTI + 18 extendidos para que el modelo elija el más cercano
  * (o ninguno) al reportar un hallazgo — mismo marco normativo que ya usa el resto del pipeline.
  */
+/**
+ * Instrucciones para respuestas acotadas: generar texto es lo que más tarda (y lo que más
+ * cuesta, la salida vale 5x la entrada). Máximo 10 hallazgos priorizados, una oración por
+ * campo y un problema repetido se reporta una sola vez.
+ */
+export const CONCISE_INSTRUCTIONS = 'Reportá como máximo 10 hallazgos, priorizando los de mayor impacto para usuarios con discapacidad. Si el mismo problema se repite en varios elementos, reportalo una sola vez. "failure_summary" y "remediation_hint": una sola oración cada uno. "element_sample": como máximo 150 caracteres.';
+
 export function criteriaListText(includeExtended = false) {
   const onti = ontiCriteria.map((c) => `${c.wcag_criterion} (${c.level}, onti): ${c.description}`);
   if (!includeExtended) return onti.join('\n');

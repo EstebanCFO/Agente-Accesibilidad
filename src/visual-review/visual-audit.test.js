@@ -105,3 +105,24 @@ test('runVisualAudit separa el prompt en un bloque estático cacheable y uno din
   assert.ok(dynamicBlock.text.includes('a.test'));
   assert.equal(dynamicBlock.cache_control, undefined, 'el bloque con la URL cambia en cada llamada, no se cachea');
 });
+
+test('runVisualAudit manda JPEG con su media_type correcto y devuelve el consumo de tokens', async () => {
+  const calls = [];
+  const client = { messages: { create: async (params) => { calls.push(params); return {
+    stop_reason: 'tool_use',
+    usage: { input_tokens: 1500, output_tokens: 300, cache_read_input_tokens: 900 },
+    content: [{ type: 'tool_use', name: 'report_findings', input: { findings: [] } }]
+  }; } } };
+  const { usage, model } = await runVisualAudit({ url: 'https://a.test', screenshot: '/9j/4AAQSkZJRg==' }, { anthropicClient: client });
+  const image = calls[0].messages[0].content.find((b) => b.type === 'image');
+  assert.equal(image.source.media_type, 'image/jpeg');
+  assert.deepEqual(usage, { calls: 1, inputTokens: 1500, outputTokens: 300, cacheWriteTokens: 0, cacheReadTokens: 900 });
+  assert.equal(model, 'claude-sonnet-5');
+});
+
+test('runVisualAudit pide respuestas acotadas (máximo 10 hallazgos)', async () => {
+  const client = fakeClient({ findings: [] });
+  await runVisualAudit({ url: 'https://a.test', screenshot: 'ZmFrZQ==' }, { anthropicClient: client });
+  const text = client.calls[0].messages[0].content.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
+  assert.match(text, /como máximo 10 hallazgos/);
+});

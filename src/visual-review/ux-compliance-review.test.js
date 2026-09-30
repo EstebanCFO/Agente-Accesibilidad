@@ -124,3 +124,15 @@ test('runUxComplianceReview marca truncated:false cuando la respuesta no trae st
   const { truncated } = await runUxComplianceReview({ url: 'https://a.test', html: SAMPLE_HTML }, { anthropicClient: client });
   assert.equal(truncated, false);
 });
+
+test('runUxComplianceReview limpia el HTML antes de enviarlo e informa el ahorro', async () => {
+  const client = fakeClient({ findings: [] });
+  const heavy = `<html><head><script>${'var x=1;'.repeat(500)}</script><style>${'.a{}'.repeat(500)}</style></head><body class="x y z"><label for="m">Monto</label><input id="m"></body></html>`;
+  const { html_chars, usage } = await runUxComplianceReview({ url: 'https://a.test', html: heavy }, { anthropicClient: client });
+  const text = client.calls[0].messages[0].content.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
+  assert.ok(!text.includes('var x=1'));
+  assert.ok(text.includes('<label for="m">Monto</label>'));
+  assert.equal(html_chars.original, heavy.length);
+  assert.ok(html_chars.sent < 200);
+  assert.equal(usage.calls, 1);
+});
