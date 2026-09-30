@@ -8,6 +8,7 @@ import { createApp } from './server.js';
 import { JobStore } from '../job-store.js';
 import { AgentLoop } from '../agent-loop.js';
 import { createToolRegistry } from '../tools/tool-registry.js';
+import { calculateScore } from '../classification/calculate-score.js';
 
 async function waitForStatusChange(app, jobId, initialStatus, maxTries = 10) {
   let res;
@@ -54,16 +55,10 @@ const VALID_CONFIG = {
   target: { channel: 'home_banking', mode: 'url_list', urls: ['https://banco.test/login'] }
 };
 
-function minimalScores(overrides = {}) {
-  return {
-    summary: {
-      total_urls_evaluated: 1, onti_criteria_evaluated: 38, onti_criteria_compliant: 38,
-      onti_compliance_percentage: 100, onti_conformance: true, conformance_threshold: 30,
-      score_level_a: 100, score_level_aa: 100, ...overrides
-    },
-    extended_22: null,
-    by_url: []
-  };
+// score-compliance.json real (calculateScore), con o sin un criterio NOK.
+function minimalScores({ withNok = false } = {}) {
+  const findings = withNok ? [{ source: 'axe-core', wcag_criterion: '1.4.3', in_scope: 'onti', review_status: 'confirmado', affected_urls: ['https://x.test'] }] : [];
+  return calculateScore(findings, { axeResults: [{ url: 'https://x.test', violations: [], incomplete: [], passes: [], inapplicable: [] }] });
 }
 
 async function setupWithRealToolRegistry() {
@@ -219,7 +214,7 @@ test('POST /api/jobs/consolidate agrega 2 jobs completed en un dashboard consoli
   jobStore.createJob({ job_id: 'job-hb', target: { channel: 'home_banking', mode: 'url_list', urls: ['https://x.test'] }, output: { path: outputPath } });
   jobStore.createJob({ job_id: 'job-ios', target: { channel: 'app_ios', mode: 'url_list', urls: ['https://x.test'] }, output: { path: outputPath } });
   await toolRegistry.execute('generate_deliverable', { type: 'score', data: { scores: minimalScores() } }, 'job-hb');
-  await toolRegistry.execute('generate_deliverable', { type: 'score', data: { scores: minimalScores({ onti_compliance_percentage: 50, onti_conformance: false }) } }, 'job-ios');
+  await toolRegistry.execute('generate_deliverable', { type: 'score', data: { scores: minimalScores({ withNok: true }) } }, 'job-ios');
   jobStore.updateJob('job-hb', { status: 'completed' });
   jobStore.updateJob('job-ios', { status: 'completed' });
 
@@ -227,6 +222,7 @@ test('POST /api/jobs/consolidate agrega 2 jobs completed en un dashboard consoli
   assert.equal(res.status, 200);
   assert.equal(res.body.channels.length, 2);
   assert.equal(res.body.global.channels_total, 2);
+  assert.equal(res.body.global.channels_con_nok, 1);
 });
 
 test('POST /api/jobs/consolidate responde 422 si algún job no está completed', async () => {
