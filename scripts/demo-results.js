@@ -1,6 +1,6 @@
 /**
- * Arma las tarjetas de resultados parciales que muestra el panel (puntaje ONTI y semáforo de
- * problemas por severidad). Lógica pura, sin I/O.
+ * Arma las tarjetas de resultados parciales que muestra el panel (Compliance WCAG, problemas por
+ * severidad, buenas prácticas, pruebas de teclado y consumo de IA). Lógica pura, sin I/O.
  */
 const IMPACT_ORDER = ['critical', 'serious', 'moderate', 'minor'];
 
@@ -28,21 +28,6 @@ export function countViolationsByImpact(axeResults = [], { includeExtended = fal
     }
   }
   return counts;
-}
-
-/** Tarjeta del puntaje ONTI a partir de calculateScore().summary. */
-export function buildScoreCard(summary) {
-  if (!summary) return null;
-  const threshold = summary.effective_conformance_threshold ?? summary.conformance_threshold;
-  const conforme = Boolean(summary.onti_conformance);
-  return {
-    key: 'score',
-    label: 'Cumplimiento ONTI',
-    value: `${summary.onti_criteria_compliant}/${summary.onti_criteria_evaluated}`,
-    detail: `${summary.onti_compliance_percentage}% · ${conforme ? 'Conforme' : 'No conforme'} (mín. ${threshold})`,
-    tone: conforme ? 'ok' : 'bad',
-    ring: { pct: summary.onti_compliance_percentage, tone: conforme ? 'ok' : 'bad' }
-  };
 }
 
 const PCT = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 2 });

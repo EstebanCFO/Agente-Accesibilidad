@@ -1,4 +1,6 @@
 import ExcelJS from 'exceljs';
+import { pageLabels, criteriaWithoutAutomatedRules } from './report-helpers.js';
+import { DS_CSS, DS_COLORS, DS_FRAMED_SCRIPT, dsHeaderHtml, dsFooterHtml } from './design-system.js';
 
 const SCOPE_ORDER = { onti: 0, extended_22: 1 };
 const LEVEL_ORDER = { A: 0, AA: 1 };
@@ -23,27 +25,15 @@ function compareByPriority(a, b) {
 }
 
 /**
- * "Quick win regulatorio" (SPEC §8.5): un criterio ONTI violado se marca así solo cuando
- * corregir CUALQUIERA de los criterios violados alcanza por sí solo el umbral de conformidad
- * (es decir, falta exactamente 1 criterio para cruzar de <30 a >=30/38). Si faltan 2 o más,
- * ningún criterio individual cruza el umbral por su cuenta, así que no se marca ninguno.
+ * Roadmap de remediación: solo los NOK de la Sección 1 (violaciones confirmadas de axe-core).
+ * Lo que axe no pudo decidir (requiere_revision) queda "a validar" y no entra al plan de
+ * corrección; los hallazgos complementarios del Agente tampoco. Ya no hay "quick win
+ * regulatorio": el resultado no tiene umbral de conformidad.
+ * estimated_effort queda en null: lo genera `ibelick/improve-ui` (sub-proyecto pendiente).
  */
-function isQuickWinEligible(ontiCriteriaCompliant, conformanceThreshold) {
-  return ontiCriteriaCompliant === conformanceThreshold - 1;
-}
-
-/**
- * estimated_effort queda siempre en null: la SPEC dice que lo genera el skill externo
- * `ibelick/improve-ui`, que todavía no está integrado (Sub-plan E). No se inventa un valor.
- * NOTA: si el canal tiene criterios N/A, "conformanceThreshold" debería ser el
- * effective_conformance_threshold de calculate_score (no el conformance_threshold crudo) para
- * que "quick win" compare contra el umbral realmente vigente esta corrida - queda a criterio
- * del agente al armar el input de este tool, no se fuerza en código.
- */
-export function buildRoadmapItems(findings, { ontiCriteriaCompliant = 0, conformanceThreshold = 30 } = {}) {
-  const quickWinEligible = isQuickWinEligible(ontiCriteriaCompliant, conformanceThreshold);
-
-  const items = (findings || []).map((finding) => ({
+export function buildRoadmapItems(findings) {
+  const nok = (findings || []).filter((f) => (!f.source || f.source === 'axe-core') && (f.review_status ?? 'confirmado') === 'confirmado');
+  const items = nok.map((finding) => ({
     wcag_criterion: finding.wcag_criterion,
     wcag_level: finding.wcag_level,
     wcag_description: finding.wcag_description,
@@ -52,9 +42,10 @@ export function buildRoadmapItems(findings, { ontiCriteriaCompliant = 0, conform
     review_status: finding.review_status ?? 'confirmado',
     affected_urls: finding.affected_urls || [],
     occurrences: finding.occurrences,
-    quick_win_regulatorio: finding.in_scope === 'onti' && quickWinEligible,
     estimated_effort: null,
-    remediation_hint: finding.remediation_hint
+    remediation_hint: finding.remediation_hint,
+    example: finding.failure_summary ?? null,
+    element_sample: finding.element_sample ?? null
   }));
 
   items.sort(compareByPriority);
@@ -76,55 +67,120 @@ function escapeHtml(value) {
 
 const SEVERITY_LABEL = { critical: 'Crítica', serious: 'Seria', moderate: 'Moderada', minor: 'Menor' };
 
-function itemRowHtml(item) {
+const TIERS = [
+  { key: 'p1', title: 'Prioridad 1 — Criterios de Nivel A', help: 'Bloquean el uso: sin corregirlos, algunas personas no pueden completar tareas en el sitio.', match: (i) => i.in_scope === 'onti' && i.wcag_level === 'A' },
+  { key: 'p2', title: 'Prioridad 2 — Criterios de Nivel AA', help: 'Dificultan el uso: el sitio se puede usar, pero con barreras.', match: (i) => i.in_scope === 'onti' && i.wcag_level !== 'A' },
+  { key: 'p3', title: 'Prioridad 3 — Capa extendida WCAG 2.1/2.2', help: 'Buenas prácticas no exigidas por la Circular BCRA.', match: (i) => i.in_scope !== 'onti' }
+];
+
+/** Primer caso concreto del problema (texto del agente sin el encabezado genérico), recortado. */
+function exampleText(example) {
+  if (!example) return '';
+  const lines = String(example).split('\n').map((l) => l.trim()).filter(Boolean)
+    .filter((l) => !/:$/.test(l) && !/^(corregir|fix)\b/i.test(l));
+  const text = lines[0] ?? '';
+  return text.length > 220 ? `${text.slice(0, 217)}…` : text;
+}
+
+function itemRowHtml(item, labels) {
+  const pages = item.affected_urls.map((u) => `<li title="${escapeHtml(u)}">${escapeHtml(labels.get(u) ?? u)}</li>`).join('');
+  const example = exampleText(item.example);
   return `
     <tr class="severity-${item.severity}">
       <td>${item.priority_rank}</td>
-      <td>${escapeHtml(item.wcag_criterion)}</td>
-      <td>${escapeHtml(item.wcag_level)}</td>
-      <td>${item.in_scope === 'onti' ? 'ONTI' : 'Extendida 2.1/2.2'}</td>
+      <td><strong>${escapeHtml(item.wcag_description)}</strong>
+        ${example ? `<br><small>Detalle: ${escapeHtml(example)}</small>` : ''}</td>
+      <td>${escapeHtml(item.wcag_criterion)}<br><small>Nivel ${escapeHtml(item.wcag_level)}</small></td>
       <td>${SEVERITY_LABEL[item.severity] ?? escapeHtml(item.severity)}</td>
-      <td>${item.quick_win_regulatorio ? '✔ Quick win regulatorio' : ''}</td>
-      <td>${item.affected_urls.length}</td>
-      <td>${item.occurrences}</td>
-      <td>${escapeHtml(item.wcag_description)}</td>
+      <td><ul class="pages">${pages}</ul></td>
+      <td class="num">${item.occurrences ?? ''}</td>
       <td>${escapeHtml(item.remediation_hint)}</td>
     </tr>`;
 }
 
-export function buildRoadmapHtml({ jobId, channel, items }) {
-  const rows = items.map(itemRowHtml).join('\n');
+function tierHtml(tier, items, labels) {
+  if (items.length === 0) return '';
+  return `<section class="tier">
+    <h2>${escapeHtml(tier.title)} <span class="pill">${items.length} problema${items.length > 1 ? 's' : ''}</span></h2>
+    <p class="meta">${escapeHtml(tier.help)}</p>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>#</th><th>Problema</th><th>Criterio</th><th>Severidad</th><th>Páginas afectadas</th><th>Elementos</th><th>Cómo corregir</th></tr></thead>
+      <tbody>${items.map((i) => itemRowHtml(i, labels)).join('\n')}</tbody>
+    </table>
+    </div>
+  </section>`;
+}
+
+/** Buenas prácticas con mejora sugerida: complementarias, fuera del plan de corrección WCAG. */
+function bestPracticesHtml(bestPractices, labels) {
+  const rules = (bestPractices?.rules ?? []).filter((r) => r.status === 'mejora');
+  if (rules.length === 0) return '';
+  return `<section class="tier">
+    <h2>Mejoras sugeridas — buenas prácticas <span class="pill">No forman parte de la normativa BCRA</span></h2>
+    <p class="meta">Reglas de buenas prácticas del agente que conviene corregir. No afectan el compliance WCAG.</p>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Regla</th><th>Qué pide</th><th>Impacto</th><th>Páginas</th></tr></thead>
+      <tbody>${rules.map((r) => `<tr><td>${escapeHtml(r.rule_id)}</td><td>${escapeHtml(r.help)}</td><td>${SEVERITY_LABEL[r.impact] ?? '—'}</td><td><ul class="pages">${r.affected_urls.map((u) => `<li title="${escapeHtml(u)}">${escapeHtml(labels.get(u) ?? u)}</li>`).join('')}</ul></td></tr>`).join('')}</tbody>
+    </table>
+    </div>
+  </section>`;
+}
+
+export function buildRoadmapHtml({ jobId, channel, items, urls, bestPractices = null }) {
+  const allUrls = urls?.length ? urls : [...new Set(items.flatMap((i) => i.affected_urls))];
+  const labels = pageLabels([...allUrls, ...items.flatMap((i) => i.affected_urls), ...(bestPractices?.rules ?? []).flatMap((r) => r.affected_urls)]);
+  const affectedPages = new Set(items.flatMap((i) => i.affected_urls));
+  const criterios = new Set(items.map((i) => i.wcag_criterion));
+  const elementos = items.reduce((sum, i) => sum + (i.occurrences ?? 0), 0);
+  const sinReglas = criteriaWithoutAutomatedRules().missing.length;
+
+  const tiles = [
+    ['Problemas a corregir', items.length],
+    ['Criterios afectados', criterios.size],
+    ['Páginas afectadas', `${affectedPages.size} de ${allUrls.length}`],
+    ['Elementos a corregir', elementos]
+  ].map(([label, value]) => `<div class="stat-tile"><div class="ds-kpi-label">${label}</div><div class="ds-kpi-value">${value}</div></div>`).join('');
+
+  const body = items.length === 0
+    ? '<p class="empty">El agente no detectó problemas automáticos a corregir.</p>'
+    : TIERS.map((t) => tierHtml(t, items.filter(t.match), labels)).join('\n');
+
   return `<!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
 <title>Roadmap de Remediación — ${escapeHtml(jobId)}</title>
-<style>
-  body { font-family: Arial, Helvetica, sans-serif; margin: 2rem; color: #1a1a1a; }
-  h1 { font-size: 1.4rem; }
-  .meta { color: #555; margin-bottom: 1.5rem; }
-  table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
-  th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; vertical-align: top; }
-  th { background: #14213d; color: #fff; position: sticky; top: 0; }
-  tr.severity-critical { background: #fdecea; }
-  tr.severity-serious { background: #fff4e5; }
-  tr.severity-moderate { background: #fffbea; }
+<style>${DS_CSS}
+  .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 0 0 12px; }
+  .summary .stat-tile { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+  .summary .ds-kpi-label { color: var(--text2); } .summary .ds-kpi-value { color: var(--navy); }
+  .explain { background: #fff; border-left: 4px solid var(--blue); border-radius: 8px; padding: 10px 14px; font-size: 13px; margin: 0 0 18px; }
+  .tier { margin-bottom: 22px; }
+  .table-wrap { overflow-x: auto; background: #fff; border: 1px solid var(--border); border-radius: 12px; }
+  th { background: var(--navy); color: #fff; position: sticky; top: 0; border-bottom: 0; }
+  td { vertical-align: top; }
+  td small { color: var(--text2); }
+  td.num { text-align: right; font-weight: 600; }
+  ul.pages { margin: 0; padding-left: 16px; font-size: 12px; }
+  tr.severity-critical td:first-child { box-shadow: inset 4px 0 0 var(--red); }
+  tr.severity-serious td:first-child { box-shadow: inset 4px 0 0 var(--orange); }
+  tr.severity-moderate td:first-child { box-shadow: inset 4px 0 0 #E0A100; }
 </style>
 </head>
 <body>
+  ${DS_FRAMED_SCRIPT}
+  ${dsHeaderHtml('Roadmap de Remediación')}
+  <main>
   <h1>Roadmap Preliminar de Remediación</h1>
-  <p class="meta">Job: ${escapeHtml(jobId)} · Canal: ${escapeHtml(channel ?? 'N/D')} · Generado: ${new Date().toISOString()}</p>
-  <table>
-    <thead>
-      <tr>
-        <th>#</th><th>Criterio</th><th>Nivel</th><th>Alcance</th><th>Severidad</th>
-        <th>Quick win</th><th>URLs afectadas</th><th>Ocurrencias</th><th>Descripción</th><th>Sugerencia</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${rows}
-    </tbody>
-  </table>
+  <p class="meta">Job: ${escapeHtml(jobId)} · Generado: ${new Date().toISOString()}</p>
+  <div class="summary">${tiles}</div>
+  <p class="explain">Es el <strong>total de problemas que el agente detectó automáticamente</strong>, ordenados por prioridad de corrección. Cada fila es un tipo de problema (por ejemplo, texto con contraste insuficiente) y puede repetirse en varios elementos y páginas: la columna <em>Elementos</em> indica cuántas veces aparece en total. Incluye solo los criterios NOK: no incluye los criterios a validar${sinReglas > 0 ? ` (entre ellos, los ${sinReglas} que requieren tecnología asistiva o revisión manual)` : ''} ni las pruebas de teclado del Agente.</p>
+  ${body}
+  ${bestPracticesHtml(bestPractices, labels)}
+  </main>
+  ${dsFooterHtml()}
 </body>
 </html>`;
 }
@@ -136,16 +192,21 @@ export async function buildRoadmapWorkbook(items) {
     { header: '#', key: 'priority_rank', width: 6 },
     { header: 'Criterio WCAG', key: 'wcag_criterion', width: 14 },
     { header: 'Nivel', key: 'wcag_level', width: 8 },
-    { header: 'Alcance', key: 'in_scope', width: 14 },
+    { header: 'Prioridad', key: 'tier', width: 34 },
     { header: 'Severidad', key: 'severity', width: 12 },
     { header: 'Estado de revisión', key: 'review_status', width: 18 },
-    { header: 'Quick win regulatorio', key: 'quick_win_regulatorio', width: 20 },
-    { header: 'URLs afectadas', key: 'affected_urls_count', width: 16 },
-    { header: 'Ocurrencias', key: 'occurrences', width: 12 },
+    { header: 'Páginas afectadas', key: 'affected_pages', width: 40 },
+    { header: 'Elementos', key: 'occurrences', width: 12 },
     { header: 'Descripción', key: 'wcag_description', width: 32 },
     { header: 'Esfuerzo estimado', key: 'estimated_effort', width: 16 },
     { header: 'Sugerencia de remediación', key: 'remediation_hint', width: 50 }
   ];
-  sheet.addRows(items.map((item) => ({ ...item, affected_urls_count: item.affected_urls.length })));
+  const labels = pageLabels(items.flatMap((i) => i.affected_urls));
+  sheet.addRows(items.map((item) => ({
+    ...item,
+    tier: TIERS.find((t) => t.match(item))?.title ?? '',
+    severity: SEVERITY_LABEL[item.severity] ?? item.severity,
+    affected_pages: item.affected_urls.map((u) => labels.get(u) ?? u).join('\n')
+  })));
   return workbook;
 }

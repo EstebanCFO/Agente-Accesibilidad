@@ -83,7 +83,7 @@ test('generateDeliverable("roadmap") escribe json + html + xlsx priorizados', as
   ];
 
   const filePaths = await generateDeliverable('roadmap', {
-    jobId: 'job-7', channel: 'home_banking', findings, ontiCriteriaCompliant: 29, conformanceThreshold: 30
+    jobId: 'job-7', channel: 'home_banking', findings
   }, { outputDir });
 
   assert.equal(filePaths.length, 3);
@@ -92,11 +92,11 @@ test('generateDeliverable("roadmap") escribe json + html + xlsx priorizados', as
 
   const jsonDoc = JSON.parse(await readFile(jsonPath, 'utf8'));
   assert.equal(jsonDoc.items[0].wcag_criterion, '1.1.1'); // nivel A + critical va primero que AA + serious
-  assert.equal(jsonDoc.items[0].quick_win_regulatorio, true); // compliant=29, threshold=30 -> falta 1
+  assert.equal('quick_win_regulatorio' in jsonDoc.items[0], false);
 
   const html = await readFile(htmlPath, 'utf8');
   assert.match(html, /Roadmap Preliminar de Remediación/);
-  assert.match(html, /Quick win regulatorio/);
+  assert.doesNotMatch(html, /Quick win/);
 });
 
 test('generateDeliverable("matriz") escribe json + html + xlsx con la vista por página', async () => {
@@ -324,7 +324,7 @@ test('generateDeliverable: los hallazgos del Agente (visual/UX) no entran en los
   assert.deepEqual(inventario.findings.map((f) => f.id), ['x1']);
   assert.deepEqual(inventario.complementary_findings.map((f) => f.id), ['v1']);
 
-  const [, htmlPath] = await generateDeliverable('roadmap', { jobId: 'job-1', channel: 'home_banking', findings: [axe, agente], ontiCriteriaCompliant: 37, conformanceThreshold: 30 }, { outputDir });
+  const [, htmlPath] = await generateDeliverable('roadmap', { jobId: 'job-1', channel: 'home_banking', findings: [axe, agente] }, { outputDir });
   const roadmapHtml = await readFile(htmlPath, 'utf8');
   assert.match(roadmapHtml, /1\.1\.1/);
   assert.doesNotMatch(roadmapHtml, /1\.4\.3/);

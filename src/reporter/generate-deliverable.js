@@ -47,13 +47,10 @@ const BUILDERS = {
     return [jsonPath, htmlPath, xlsxPath];
   },
   roadmap: async (data, outputDir) => {
-    const items = buildRoadmapItems(data.findings, {
-      ontiCriteriaCompliant: data.ontiCriteriaCompliant,
-      conformanceThreshold: data.conformanceThreshold
-    });
+    const items = buildRoadmapItems(data.findings);
 
     const jsonPath = await writeJsonFile(outputDir, 'roadmap-remediacion.json', buildRoadmapJson({ jobId: data.jobId, items }));
-    const htmlPath = await writeTextFile(outputDir, 'roadmap-remediacion.html', buildRoadmapHtml({ jobId: data.jobId, channel: data.channel, items, urls: data.urls }));
+    const htmlPath = await writeTextFile(outputDir, 'roadmap-remediacion.html', buildRoadmapHtml({ jobId: data.jobId, channel: data.channel, items, urls: data.urls, bestPractices: data.scores?.best_practices ?? null }));
 
     const workbook = await buildRoadmapWorkbook(items);
     await mkdir(outputDir, { recursive: true });

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { countViolationsByImpact, isWcagViolation, buildWcagCard, buildBestPracticesCard, formatPageChecks, buildScoreCard, buildSeverityCard, buildKeyboardCard, buildUsageCard } from './demo-results.js';
+import { countViolationsByImpact, isWcagViolation, buildWcagCard, buildBestPracticesCard, formatPageChecks, buildSeverityCard, buildKeyboardCard, buildUsageCard } from './demo-results.js';
 
 test('countViolationsByImpact suma por severidad entre páginas e ignora impactos desconocidos', () => {
   const counts = countViolationsByImpact([
@@ -9,30 +9,6 @@ test('countViolationsByImpact suma por severidad entre páginas e ignora impacto
     {}
   ]);
   assert.deepEqual(counts, { critical: 2, serious: 0, moderate: 0, minor: 1 });
-});
-
-test('buildScoreCard muestra X/Y, porcentaje y conformidad con el umbral efectivo', () => {
-  const card = buildScoreCard({
-    onti_criteria_compliant: 27, onti_criteria_evaluated: 38, onti_compliance_percentage: 71.05,
-    onti_conformance: false, conformance_threshold: 30, effective_conformance_threshold: 30
-  });
-  assert.equal(card.value, '27/38');
-  assert.match(card.detail, /71\.05% · No conforme \(mín\. 30\)/);
-  assert.equal(card.tone, 'bad');
-  assert.deepEqual(card.ring, { pct: 71.05, tone: 'bad' });
-});
-
-test('buildScoreCard marca ok cuando es conforme', () => {
-  const card = buildScoreCard({
-    onti_criteria_compliant: 33, onti_criteria_evaluated: 35, onti_compliance_percentage: 94.29,
-    onti_conformance: true, conformance_threshold: 30, effective_conformance_threshold: 28
-  });
-  assert.equal(card.tone, 'ok');
-  assert.match(card.detail, /mín\. 28/);
-});
-
-test('buildScoreCard sin summary devuelve null', () => {
-  assert.equal(buildScoreCard(undefined), null);
 });
 
 test('countViolationsByImpact cuenta solo WCAG 2.0 (BCRA) por default: ignora 2.1/2.2 y best-practice', () => {

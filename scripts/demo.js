@@ -429,9 +429,7 @@ async function runDemo(ui, { stage }) {
   ui.pushResult(buildBestPracticesCard(finalScores.best_practices));
   const data = {
     jobId, channel: config.channel, scores: finalScores, findings, keyboardResults, axeResults,
-    urls: axeResults.map((r) => r.url), includeExtended: config.includeExtended,
-    ontiCriteriaCompliant: finalScores.summary.onti_criteria_compliant,
-    conformanceThreshold: finalScores.summary.effective_conformance_threshold ?? finalScores.summary.conformance_threshold
+    urls: axeResults.map((r) => r.url), includeExtended: config.includeExtended
   };
   const generated = [];
   for (const [i, deliverable] of DELIVERABLES.entries()) {
