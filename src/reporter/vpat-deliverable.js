@@ -256,15 +256,21 @@ ${VPAT_CSS}
 </html>`;
 }
 
-/** Arma el VPAT completo a partir de los mismos datos que reciben los demás entregables. */
+/**
+ * Arma el VPAT completo a partir de los mismos datos que reciben los demás entregables. Acepta
+ * también las claves snake_case con que el agente autónomo nombra los resultados de sus tools
+ * (classified_findings, keyboard_results): sin findings, un criterio que falla podría salir Supports.
+ */
 export function buildVpatReportHtml(data, { date = new Date() } = {}) {
   const axeResults = data.axeResults ?? data.axe_results ?? [];
   const includeExtended = data.includeExtended ?? false;
-  const rows = buildVpatRows({ findings: data.findings ?? [], axeResults, includeExtended });
+  const findings = data.findings ?? data.classified_findings ?? [];
+  const keyboardResults = data.keyboardResults ?? data.keyboard_results ?? [];
+  const rows = buildVpatRows({ findings, axeResults, includeExtended });
   const info = resolveVpatInfo(data.vpat, { target: data.target ?? data.urls?.[0] ?? '', channel: data.channel, date });
   return buildVpatHtml({
     jobId: data.jobId, channel: data.channel, info, rows, includeExtended, date,
     pagesEvaluated: axeResults.filter((r) => r && !r.error).length,
-    keyboardRan: (data.keyboardResults ?? []).length > 0
+    keyboardRan: keyboardResults.length > 0
   });
 }

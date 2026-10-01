@@ -204,3 +204,11 @@ test('buildVpatReportHtml sin target usa la primera URL evaluada', () => {
   const html = buildVpatReportHtml(reportData({ target: undefined }), { date: FECHA });
   assert.ok(html.includes('https://a.test/p1'));
 });
+
+test('buildVpatReportHtml acepta las claves snake_case del agente (classified_findings, keyboard_results)', () => {
+  const base = reportData();
+  const data = { ...base, findings: undefined, keyboardResults: undefined, classified_findings: base.findings, keyboard_results: base.keyboardResults };
+  const html = buildVpatReportHtml(data, { date: FECHA });
+  assert.match(html, /Problemas en 1 de 2 páginas: image-alt/);
+  assert.match(html, /pruebas de teclado del Agente/);
+});

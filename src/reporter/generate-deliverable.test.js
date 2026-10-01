@@ -348,3 +348,10 @@ test('generateDeliverable("vpat") escribe vpat-wcag.pdf (PDF real con Chromium)'
   const pdf = await readFile(filePaths[0]);
   assert.equal(pdf.subarray(0, 4).toString(), '%PDF');
 });
+
+test('generateDeliverable acepta classified_findings (clave del agente autónomo) como findings', async () => {
+  const outputDir = await mkdtemp(path.join(tmpdir(), 'f1-alias-'));
+  const finding = { id: 'f-alias', wcag_criterion: '1.1.1', wcag_level: 'A', wcag_description: 'Contenido no textual', in_scope: 'onti', severity: 'critical', source: 'axe-core', review_status: 'confirmado', rule_id: 'image-alt', affected_urls: ['https://a.test'], occurrences: 1 };
+  const [jsonPath] = await generateDeliverable('inventario', { jobId: 'job-alias', channel: 'home_banking', classified_findings: [finding] }, { outputDir });
+  assert.match(await readFile(jsonPath, 'utf8'), /f-alias/);
+});

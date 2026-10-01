@@ -140,7 +140,8 @@ export async function generateDeliverable(type, data, { outputDir }) {
   }
   // Regla del proyecto: los informes se basan solo en axe-core. Los hallazgos de la revisión del
   // Agente (visual/UX) viajan aparte como análisis complementario y no cambian ningún cálculo.
-  const { primary, complementary } = splitFindings(data?.findings);
+  // El agente autónomo nombra los findings como los devuelve calculate_score: classified_findings.
+  const { primary, complementary } = splitFindings(data?.findings ?? data?.classified_findings);
   const complementaryFindings = [...complementary, ...(data?.complementaryFindings ?? [])];
   return builder({ ...data, findings: primary, complementaryFindings }, outputDir);
 }
