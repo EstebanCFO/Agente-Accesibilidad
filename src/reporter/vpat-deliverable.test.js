@@ -212,3 +212,8 @@ test('buildVpatReportHtml acepta las claves snake_case del agente (classified_fi
   assert.match(html, /Problemas en 1 de 2 páginas: image-alt/);
   assert.match(html, /pruebas de teclado del Agente/);
 });
+
+test('el documento se titula VPAT_Informe De Accesibilidad', () => {
+  const html = buildVpatReportHtml(reportData(), { date: FECHA });
+  assert.match(html, /<title>VPAT_Informe De Accesibilidad<\/title>/);
+});

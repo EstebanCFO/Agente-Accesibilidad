@@ -109,7 +109,7 @@ const BUILDERS = {
   vpat: async (data, outputDir) => {
     const html = buildVpatReportHtml(data);
     await mkdir(outputDir, { recursive: true });
-    const pdfPath = path.join(outputDir, 'vpat-wcag.pdf');
+    const pdfPath = path.join(outputDir, 'VPAT_Informe De Accesibilidad.pdf');
     await renderPdf(html, pdfPath, { jobId: data.jobId, footerLabel: 'Informe de Conformidad de Accesibilidad (VPAT®)' });
     return [pdfPath];
   },

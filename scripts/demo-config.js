@@ -25,13 +25,6 @@ export const MAX_PAGES_LIMIT = 20;
 // best-practice siempre corre: alimenta la Sección 2 (no suma al compliance, ver best-practices.js).
 const BASE_WCAG_TAGS = ['wcag2a', 'wcag2aa', 'best-practice'];
 const EXTENDED_WCAG_TAGS = ['wcag21a', 'wcag21aa', 'wcag22aa'];
-// Datos opcionales del producto para el VPAT: campo del formulario → clave de config.vpat.
-const VPAT_FORM_FIELDS = [
-  { name: 'vpatProductName', key: 'product_name', label: 'VPAT · Nombre del producto', placeholder: 'Opcional · por defecto, el dominio del sitio' },
-  { name: 'vpatProductVersion', key: 'product_version', label: 'VPAT · Versión', placeholder: 'Opcional · por defecto, "Evaluado el <fecha>"' },
-  { name: 'vpatDescription', key: 'description', label: 'VPAT · Descripción del producto', placeholder: 'Opcional · por defecto, canal y URL' },
-  { name: 'vpatContact', key: 'contact', label: 'VPAT · Contacto', placeholder: 'Opcional · por defecto, CFOTech IT Global Services' }
-];
 const DESKTOP_VIEWPORT = { width: 1280, height: 800 };
 const MOBILE_VIEWPORT = { width: 390, height: 844 };
 
@@ -65,8 +58,7 @@ export function buildConfigFields(values = {}) {
     { name: 'keyboardReview', type: 'checkbox', label: 'Pruebas de teclado del Agente (trampas de teclado, orden y visibilidad del foco, cambios al recibir el foco)', value: v.keyboardReview },
     { name: 'includeExtended', type: 'checkbox', label: 'Sumar WCAG 2.2 (score aparte)', value: v.includeExtended },
     { name: 'authUser', type: 'text', label: 'Usuario de prueba', value: v.authUser, placeholder: 'Opcional', autocomplete: 'off', showIf: withAuth },
-    { name: 'authPassword', type: 'password', label: 'Contraseña', value: '', placeholder: 'Solo si hay usuario', autocomplete: 'off', showIf: withAuth },
-    ...VPAT_FORM_FIELDS.map((f) => ({ name: f.name, type: 'text', label: f.label, value: v[f.name], placeholder: f.placeholder }))
+    { name: 'authPassword', type: 'password', label: 'Contraseña', value: '', placeholder: 'Solo si hay usuario', autocomplete: 'off', showIf: withAuth }
   ];
 }
 
@@ -74,8 +66,7 @@ export function defaultConfigValues() {
   return {
     source: 'reference', referenceSite: '1', targetUrl: '', targetPath: '', channel: 'home_banking',
     maxPages: DEFAULT_MAX_PAGES, selectedPages: [], keyboardReview: true, includeExtended: false,
-    authUser: '', authPassword: '',
-    vpatProductName: '', vpatProductVersion: '', vpatDescription: '', vpatContact: ''
+    authUser: '', authPassword: ''
   };
 }
 
@@ -134,12 +125,6 @@ export function validateDemoConfig(raw = {}) {
 
   if (Object.keys(errors).length > 0) return { config: null, errors };
 
-  const vpat = {};
-  for (const f of VPAT_FORM_FIELDS) {
-    const value = String(values[f.name] ?? '').trim();
-    if (value) vpat[f.key] = value;
-  }
-
   const includeExtended = asBool(values.includeExtended);
   return {
     errors: {},
@@ -153,8 +138,7 @@ export function validateDemoConfig(raw = {}) {
       keyboardReview: asBool(values.keyboardReview),
       wcagTags: includeExtended ? [...BASE_WCAG_TAGS, ...EXTENDED_WCAG_TAGS] : [...BASE_WCAG_TAGS],
       viewport: channel === 'home_banking' ? DESKTOP_VIEWPORT : MOBILE_VIEWPORT,
-      auth: authUser ? { type: 'basic', config: { username: authUser, password: authPassword } } : null,
-      vpat
+      auth: authUser ? { type: 'basic', config: { username: authUser, password: authPassword } } : null
     }
   };
 }
@@ -180,8 +164,6 @@ export function buildConfigSummary(config) {
     { label: 'Pruebas de teclado del Agente', value: config.keyboardReview ? 'sí' : 'no' }
   ];
   if (config.source !== 'reference') rows.push({ label: 'Usuario de prueba', value: config.auth ? config.auth.config.username : 'no' });
-  const vpatValues = VPAT_FORM_FIELDS.map((f) => config.vpat?.[f.key]).filter(Boolean);
-  if (vpatValues.length) rows.push({ label: 'Datos para el VPAT', value: vpatValues.join(' · ') });
   return rows;
 }
 

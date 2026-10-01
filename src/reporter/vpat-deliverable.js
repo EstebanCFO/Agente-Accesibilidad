@@ -209,7 +209,7 @@ export function buildVpatHtml({ jobId, channel, info, rows, includeExtended, dat
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<title>Informe de Conformidad de Accesibilidad (VPAT) — ${escapeHtml(info.productName)}</title>
+<title>VPAT_Informe De Accesibilidad</title>
 <style>${DS_CSS}
 ${VPAT_CSS}
 </style>

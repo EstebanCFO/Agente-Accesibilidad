@@ -7,7 +7,7 @@ el formato estándar que piden las áreas de compras: VPAT® 2.5, edición WCAG 
 
 ## Objetivo
 
-Al finalizar cada corrida, generar `vpat-wcag.pdf` en la carpeta del job: un Informe de
+Al finalizar cada corrida, generar `VPAT_Informe De Accesibilidad.pdf` en la carpeta del job: un Informe de
 Conformidad de Accesibilidad con la estructura de VPAT 2.5 edición WCAG, completo (Tablas 1, 2 y
 3), en español, con los niveles de conformidad en los términos oficiales en inglés.
 
@@ -60,7 +60,7 @@ con él). Su contenido sale de la misma fuente que el panel y el resto de los in
 "vpat": { "product_name": "", "product_version": "", "description": "", "contact": "" }
 ```
 
-Opcional en la config del agente y en el formulario del demo. Lo que falte se completa con
+Opcional en la config del agente autónomo. El formulario del demo no pide estos datos (cambio 2026-10-01, a pedido del usuario): el VPAT del demo usa siempre los defaults. Lo que falte se completa con
 defaults (`resolveVpatInfo`):
 
 | Campo | Default |
@@ -86,7 +86,7 @@ defaults (`resolveVpatInfo`):
 ### Cambios
 
 - `src/reporter/generate-deliverable.js` — builder `vpat`: arma el HTML y lo pasa a `renderPdf`
-  (existente, Chromium vía Playwright, sin dependencias nuevas) → `vpat-wcag.pdf`. `renderPdf` gana
+  (existente, Chromium vía Playwright, sin dependencias nuevas) → `VPAT_Informe De Accesibilidad.pdf`. `renderPdf` gana
   un parámetro opcional para el texto del pie: "CFOTech · Informe de Conformidad de Accesibilidad
   (VPAT®)" (el consolidado mantiene el suyo).
 - `src/config/validate-config.js` — acepta el bloque opcional `vpat`; campos no-string se ignoran
@@ -95,7 +95,7 @@ defaults (`resolveVpatInfo`):
 - `scripts/demo-config.js` — grupo opcional "Datos para el VPAT" (nombre, versión, descripción,
   contacto); viajan a `config.vpat`; el resumen previo los muestra solo si se cargaron.
 - `scripts/demo.js` — se agrega `{ type: 'vpat', key: 'vpat', label: 'VPAT 2.5 (WCAG)', open:
-  'vpat-wcag.pdf' }` a `DELIVERABLES` y se pasa `vpat` en los datos del entregable. Aparece en el
+  'VPAT_Informe De Accesibilidad.pdf' }` a `DELIVERABLES` y se pasa `vpat` en los datos del entregable. Aparece en el
   visor de informes junto al PDF consolidado.
 
 No se tocan `demo-panel.html` ni `demo-page-selection.js` (tienen cambios del usuario sin commitear).
@@ -105,7 +105,7 @@ No se tocan `demo-panel.html` ni `demo-page-selection.js` (tienen cambios del us
 Fin de corrida → `demo.js` (o el agente vía `generate_deliverable`) llama
 `generateDeliverable('vpat', { jobId, channel, findings, axeResults, urls, includeExtended,
 keyboardResults, vpat, target })` → `buildVpatRows` + `resolveVpatInfo` + `buildVpatHtml` →
-`renderPdf` → `<outputDir>/vpat-wcag.pdf`.
+`renderPdf` → `<outputDir>/VPAT_Informe De Accesibilidad.pdf`.
 
 ## Errores
 
@@ -131,7 +131,7 @@ keyboardResults, vpat, target })` → `buildVpatRows` + `resolveVpatInfo` + `bui
   - HTML: escapa `<script>` en el nombre del producto; contiene las tres tablas, la tabla de
     términos y los estándares aplicables según el check.
 - `src/reporter/generate-deliverable.test.js` — un test del builder `vpat` que genera el PDF real
-  con Chromium y verifica que `vpat-wcag.pdf` existe y empieza con `%PDF`.
+  con Chromium y verifica que `VPAT_Informe De Accesibilidad.pdf` existe y empieza con `%PDF`.
 - `src/config/validate-config.test.js` — acepta `vpat`; ignora no-strings con aviso; sin `vpat`
   sigue válida.
 - `scripts/demo-config.test.js` — los campos opcionales viajan a `config.vpat`; el resumen los

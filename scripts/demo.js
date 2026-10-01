@@ -72,7 +72,7 @@ const DELIVERABLES = [
   { type: 'inventario', key: 'inventario', label: 'Inventario de hallazgos', open: 'inventario-hallazgos.html' },
   { type: 'matriz', key: 'matriz', label: 'Matriz de criticidad WCAG 2.0 AA', open: 'matriz-criticidad.html' },
   { type: 'informe-pdf', key: 'pdf', label: 'Informe PDF consolidado', open: 'informe-consolidado.pdf' },
-  { type: 'vpat', key: 'vpat', label: 'VPAT 2.5 (WCAG)', open: 'vpat-wcag.pdf' }
+  { type: 'vpat', key: 'vpat', label: 'VPAT_Informe De Accesibilidad', open: 'VPAT_Informe De Accesibilidad.pdf' }
 ];
 
 /** Mensaje corto y legible para la audiencia (sin JSON crudo de la API ni stack traces). */
@@ -435,7 +435,7 @@ async function runDemo(ui, { stage }) {
   const data = {
     jobId, channel: config.channel, scores: finalScores, findings, keyboardResults, axeResults,
     urls: axeResults.map((r) => r.url), includeExtended: config.includeExtended,
-    vpat: config.vpat, target: config.target
+    target: config.target
   };
   const generated = [];
   for (const [i, deliverable] of DELIVERABLES.entries()) {
@@ -455,7 +455,8 @@ async function runDemo(ui, { stage }) {
   // Una sola página con los informes embebidos: botones arriba, el informe elegido debajo.
   const viewable = generated.filter((d) => d.open);
   await writeFile(path.join(outputDir, 'informes.html'), buildReportViewerHtml({
-    reports: viewable.map((d) => ({ key: d.key, label: d.label, file: d.open }))
+    // encodeURIComponent: el VPAT lleva espacios en el nombre ("VPAT_Informe De Accesibilidad.pdf").
+    reports: viewable.map((d) => ({ key: d.key, label: d.label, file: encodeURIComponent(d.open) }))
   }));
 
   // Los informes se ven embebidos en el mismo panel (sin abrir otra ventana): botones arriba y
