@@ -172,7 +172,7 @@ ${PRINT_CSS}
 }
 
 /** Renderiza el HTML a PDF A4 con Chromium (Playwright, ya dependencia del proyecto). */
-export async function renderPdf(html, pdfPath, { jobId } = {}) {
+export async function renderPdf(html, pdfPath, { jobId, footerLabel = 'Informe de Auditoría de Accesibilidad' } = {}) {
   const { chromium } = await import('playwright');
   const browser = await chromium.launch();
   try {
@@ -185,7 +185,7 @@ export async function renderPdf(html, pdfPath, { jobId } = {}) {
       displayHeaderFooter: true,
       headerTemplate: '<div></div>',
       footerTemplate: `<div style="font-family:Segoe UI,sans-serif;font-size:8px;color:#4A5568;width:100%;padding:0 12mm;display:flex;justify-content:space-between">
-        <span>CFOTech · Informe de Auditoría de Accesibilidad${jobId ? ` · ${escapeHtml(jobId)}` : ''}</span>
+        <span>CFOTech · ${escapeHtml(footerLabel)}${jobId ? ` · ${escapeHtml(jobId)}` : ''}</span>
         <span>Página <span class="pageNumber"></span> de <span class="totalPages"></span></span></div>`,
       margin: { top: '14mm', bottom: '16mm', left: '12mm', right: '12mm' }
     });

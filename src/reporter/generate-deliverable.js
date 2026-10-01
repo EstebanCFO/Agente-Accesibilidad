@@ -9,6 +9,7 @@ import { buildDashboardHtml } from './dashboard-deliverable.js';
 import { buildConsolidatedDashboardHtml } from './consolidated-dashboard-deliverable.js';
 import { buildInformeNarrativoJson, buildInformeNarrativoHtml } from './informe-narrativo-deliverable.js';
 import { buildConsolidatedReportHtml, renderPdf } from './pdf-report-deliverable.js';
+import { buildVpatReportHtml } from './vpat-deliverable.js';
 
 async function writeJsonFile(outputDir, filename, doc) {
   await mkdir(outputDir, { recursive: true });
@@ -102,6 +103,14 @@ const BUILDERS = {
     await mkdir(outputDir, { recursive: true });
     const pdfPath = path.join(outputDir, 'informe-consolidado.pdf');
     await renderPdf(html, pdfPath, { jobId: data.jobId });
+    return [pdfPath];
+  },
+  // Informe de Conformidad de Accesibilidad basado en VPAT 2.5, edición WCAG (spec 2026-10-01).
+  vpat: async (data, outputDir) => {
+    const html = buildVpatReportHtml(data);
+    await mkdir(outputDir, { recursive: true });
+    const pdfPath = path.join(outputDir, 'vpat-wcag.pdf');
+    await renderPdf(html, pdfPath, { jobId: data.jobId, footerLabel: 'Informe de Conformidad de Accesibilidad (VPAT®)' });
     return [pdfPath];
   },
   'dashboard-consolidado': async (data, outputDir) => {

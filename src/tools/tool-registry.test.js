@@ -242,3 +242,15 @@ test('calculate_score ya no acepta umbral y devuelve conteos', async () => {
   assert.equal(result.summary.a_validar, 38);
   assert.equal('onti_conformance' in result.summary, false);
 });
+
+test('generate_deliverable("vpat") genera vpat-wcag.pdf con la config del job', async () => {
+  const { jobStore, registry } = await setup();
+
+  const result = await registry.execute('generate_deliverable', {
+    type: 'vpat',
+    data: { findings: [], axe_results: [{ url: 'https://x.test', violations: [], incomplete: [], inapplicable: [], passes: [] }] }
+  }, 'job-1');
+
+  assert.equal(path.basename(result.file_path[0]), 'vpat-wcag.pdf');
+  assert.ok(jobStore.getJob('job-1').reports.includes('vpat-wcag.pdf'));
+});

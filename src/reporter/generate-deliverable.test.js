@@ -335,3 +335,16 @@ test('generateDeliverable: los hallazgos del Agente (visual/UX) no entran en los
   assert.match(narrativo, /Análisis complementario del Agente/);
   assert.match(narrativo, /Texto gris claro/);
 });
+
+test('generateDeliverable("vpat") escribe vpat-wcag.pdf (PDF real con Chromium)', async () => {
+  const outputDir = await mkdtemp(path.join(tmpdir(), 'f1-vpat-'));
+  const filePaths = await generateDeliverable('vpat', {
+    jobId: 'job-vpat', channel: 'home_banking', findings: [], target: 'https://a.test',
+    axeResults: [{ url: 'https://a.test', violations: [], incomplete: [], inapplicable: [], passes: [] }],
+    vpat: { product_name: 'Banco X' }
+  }, { outputDir });
+
+  assert.deepEqual(filePaths, [path.join(outputDir, 'vpat-wcag.pdf')]);
+  const pdf = await readFile(filePaths[0]);
+  assert.equal(pdf.subarray(0, 4).toString(), '%PDF');
+});
