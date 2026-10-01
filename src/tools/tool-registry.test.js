@@ -173,7 +173,7 @@ const KEYBOARD = {
     { index: 1, tag: 'a', role: '', name: 'Inicio', doc_x: 0, doc_y: 0, bbox: { x: 0, y: 0, width: 50, height: 20 }, focus_change_pct: 10, context_change: null },
     { index: 2, tag: 'button', role: '', name: 'Ingresar', doc_x: 0, doc_y: 50, bbox: { x: 0, y: 50, width: 50, height: 20 }, focus_change_pct: 0, context_change: null }
   ],
-  ended: 'ciclo', trap: null, contact_sheet: '/9j/FAKE'
+  ended: 'ciclo', trap: null, contact_sheet: '/9j/FAKE', consent_banner: { detected: true, dismissed: true, action: 'Rechazar' }
 };
 
 async function writeCapture(outputPath, name, content) {
@@ -209,6 +209,7 @@ test('keyboard_review lee keyboard_path, consulta a la IA y devuelve los 4 crite
   assert.equal(result.criteria['2.4.7'].estado, 'con_indicios');
   assert.equal(result.criteria['2.4.7'].fuente, 'Agente');
   assert.equal(result.criteria['2.1.2'].estado, 'sin_indicios');
+  assert.deepEqual(result.consent_banner, { detected: true, dismissed: true, action: 'Rechazar' });
   assert.equal(capture.params.messages[0].content.find((b) => b.type === 'image').source.data, '/9j/FAKE');
 });
 

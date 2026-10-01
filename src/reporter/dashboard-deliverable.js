@@ -209,6 +209,20 @@ function keyboardEvidence(criterionId, keyboardResults) {
     : `Prueba de teclado del Agente: sin indicios en ${evaluables.length} ${paginas}`;
 }
 
+/** Banners de cookies cerrados (o que no se pudieron cerrar) antes del recorrido con Tab. */
+function bannerNotesHtml(keyboardResults, labels) {
+  const pages = (filter) => keyboardResults.filter(filter).map((r) => escapeHtml(labels.get(r.url) ?? r.url)).join(', ');
+  const byAction = new Map();
+  for (const r of keyboardResults.filter((x) => x.consent_banner?.dismissed)) {
+    const action = r.consent_banner.action;
+    byAction.set(action, [...(byAction.get(action) ?? []), r]);
+  }
+  const notes = [...byAction.entries()].map(([action, list]) => `Se cerró un banner de cookies (${escapeHtml(action)}) antes del recorrido en: ${list.map((r) => escapeHtml(labels.get(r.url) ?? r.url)).join(', ')}.`);
+  const stuck = pages((r) => r.consent_banner?.detected && !r.consent_banner.dismissed);
+  if (stuck) notes.push(`No se pudo cerrar el banner de cookies en: ${stuck}. El recorrido puede haber quedado dentro del banner.`);
+  return notes.length ? `<p class="muted">${notes.join(' ')}</p>` : '';
+}
+
 /** Sección 3 del informe: resultado del recorrido con Tab por página, con puntaje propio. */
 function keyboardSectionHtml(keyboardResults) {
   if (keyboardResults.length === 0) return '<p class="empty">No se ejecutaron las pruebas de teclado del Agente en esta auditoría.</p>';
@@ -225,6 +239,7 @@ function keyboardSectionHtml(keyboardResults) {
     <tbody>${rows.join('')}</tbody>
   </table>
   ${motivos.length ? `<ul>${motivos.join('')}</ul>` : ''}
+  ${bannerNotesHtml(keyboardResults, labels)}
   <p class="muted">Recorrido con Tab de cada página, interpretado por el Agente. "Con indicios" requiere validación humana: estos criterios siguen "a validar" en el compliance WCAG.</p>`;
 }
 

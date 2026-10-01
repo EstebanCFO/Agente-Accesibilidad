@@ -202,13 +202,16 @@ function startKeyboardReviews(ui, axeResults, config, anthropicClient) {
     if (state.usage.calls > 0) ui.pushResult(buildUsageCard(state.usage, estimateCostUsd(state.usage, pricing)));
   };
   const setResult = (url, criteria, status) => {
-    state.results.set(url, { url, criteria, status });
+    const consentBanner = withKeyboard.find((r) => r.url === url)?.keyboard.consent_banner ?? null;
+    state.results.set(url, { url, criteria, status, consent_banner: consentBanner });
     state.listeners.forEach((fn) => fn());
   };
 
   const specs = [];
   for (const r of withKeyboard) {
     const kb = r.keyboard;
+    if (kb.consent_banner?.dismissed) ui.pushLog(`${shortUrl(r.url)}: se cerró un banner de cookies (${kb.consent_banner.action}) antes del recorrido con Tab.`);
+    else if (kb.consent_banner?.detected) ui.pushLog(`${shortUrl(r.url)}: no se pudo cerrar el banner de cookies; el recorrido puede haber quedado dentro del banner.`, 'warn');
     if (kb.error || kb.stops.length === 0 || !kb.contact_sheet) {
       setResult(r.url, buildKeyboardCriteria(kb.error ? null : kb, { error: kb.error }), 'done');
     } else {

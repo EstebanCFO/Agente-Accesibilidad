@@ -200,3 +200,11 @@ test('buildDashboardHtml: la nota de pautas usa NOK y a validar, no "no conforme
   assert.doesNotMatch(nota, /no conforme|no evaluados/);
   assert.match(nota, /NOK/);
 });
+
+test('buildDashboardHtml aclara qué banner de cookies se cerró antes del recorrido o cuál no se pudo cerrar', () => {
+  const cerrado = { ...KB('sin_indicios'), consent_banner: { detected: true, dismissed: true, action: 'Rechazar' } };
+  const abierto = { ...KB('sin_indicios'), url: 'https://a.test/otra', consent_banner: { detected: true, dismissed: false, action: null } };
+  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: sectionScores(), findings: [NOK_111], keyboardResults: [cerrado, abierto] });
+  assert.match(html, /Se cerró un banner de cookies \(Rechazar\) antes del recorrido en: \/home-banking\/pago/);
+  assert.match(html, /No se pudo cerrar el banner de cookies en: \/otra/);
+});

@@ -4,6 +4,7 @@ import axeCore from 'axe-core';
 import esLocale from 'axe-core/locales/es.json' with { type: 'json' };
 import { walkKeyboard } from './keyboard/keyboard-walk.js';
 import { renderContactSheet } from './keyboard/contact-sheet.js';
+import { dismissConsentBanner } from './keyboard/consent-banner.js';
 
 // axe-core corre con su locale oficial en español (80 reglas / 92 checks traducidos por Deque)
 // para que help/failure_summary salgan nativos en los reportes en español, en vez del inglés
@@ -13,10 +14,12 @@ import { renderContactSheet } from './keyboard/contact-sheet.js';
 /** Recorrido con Tab + hoja de contactos. Los recortes se usan para la hoja y no viajan en el resultado. */
 async function captureKeyboardEvidence(page) {
   try {
-    const walk = await walkKeyboard(page);
+    // Un banner de cookies modal encierra el foco: se cierra antes (axe-core ya lo auditó).
+    const consentBanner = await dismissConsentBanner(page);
+    const walk = await walkKeyboard(page, { resetStart: consentBanner.dismissed });
     const contactSheet = await renderContactSheet(page.context(), walk.stops);
     const stops = walk.stops.map(({ focused_png: _f, unfocused_png: _u, ...stop }) => stop);
-    return { stops, ended: walk.ended, trap: walk.trap, contact_sheet: contactSheet };
+    return { stops, ended: walk.ended, trap: walk.trap, contact_sheet: contactSheet, consent_banner: consentBanner };
   } catch (error) {
     return { stops: [], ended: 'error', trap: null, contact_sheet: null, error: error.message.split('\n')[0] };
   }

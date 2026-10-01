@@ -116,7 +116,7 @@ async function confirmTrap(page, state, cycleSelectors) {
  * documento ('ciclo'), queda encerrado ('trampa'), un elemento repite sin trampa ('repeticion'),
  * cambia la URL ('cambio_de_contexto'), se llega al tope ('tope') o no hay enfocables.
  */
-export async function walkKeyboard(page, { maxStops = MAX_TAB_STOPS } = {}) {
+export async function walkKeyboard(page, { maxStops = MAX_TAB_STOPS, resetStart = false } = {}) {
   const state = await installFocusProbe(page);
   const viewport = page.viewportSize() ?? { width: 1280, height: 800 };
   const context = page.context();
@@ -132,7 +132,21 @@ export async function walkKeyboard(page, { maxStops = MAX_TAB_STOPS } = {}) {
   let ended = 'tope';
   let trap = null;
   try {
-    await page.evaluate(() => { document.activeElement?.blur?.(); window.scrollTo(0, 0); });
+    // resetStart (tras cerrar un banner de cookies, cuyo botón enfocado ya no existe): se enfoca
+    // un marcador al principio del body y se lo quita, así el primer Tab va al primer elemento de
+    // la página y no al final del documento. No se usa siempre porque con un punto de partida el
+    // navegador ya no visita primero los tabindex positivos.
+    await page.evaluate((reset) => {
+      document.activeElement?.blur?.();
+      if (reset) {
+        const start = document.createElement('span');
+        start.tabIndex = -1;
+        document.body.prepend(start);
+        start.focus({ preventScroll: true });
+        start.remove();
+      }
+      window.scrollTo(0, 0);
+    }, resetStart);
     for (let i = 1; i <= maxStops; i++) {
       const before = { url: page.url(), popups, dialogs, modals: await modalCount(page) };
       state.last = null;

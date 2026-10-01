@@ -151,13 +151,13 @@ export function createToolRegistry({ jobStore, anthropicClient }) {
       const keyboardPath = resolveCapturePath(input.keyboard_path, jobStore, jobId);
       const keyboard = JSON.parse(await readFile(keyboardPath, 'utf8'));
       if (keyboard.error || !keyboard.stops?.length || !keyboard.contact_sheet) {
-        return { url: input.url, criteria: buildKeyboardCriteria(keyboard.error ? null : keyboard, { error: keyboard.error }) };
+        return { url: input.url, consent_banner: keyboard.consent_banner ?? null, criteria: buildKeyboardCriteria(keyboard.error ? null : keyboard, { error: keyboard.error }) };
       }
       try {
         const { review, usage } = await runKeyboardReview({ url: input.url, keyboard }, { anthropicClient });
-        return { url: input.url, criteria: buildKeyboardCriteria(keyboard, { ai: review }), usage };
+        return { url: input.url, consent_banner: keyboard.consent_banner ?? null, criteria: buildKeyboardCriteria(keyboard, { ai: review }), usage };
       } catch {
-        return { url: input.url, criteria: buildKeyboardCriteria(keyboard, { aiFailed: true }) };
+        return { url: input.url, consent_banner: keyboard.consent_banner ?? null, criteria: buildKeyboardCriteria(keyboard, { aiFailed: true }) };
       }
     }
   };

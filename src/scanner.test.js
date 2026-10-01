@@ -166,3 +166,13 @@ test('scanUrl sin captureKeyboard no recorre con teclado', async () => {
   const result = await scanUrl({ url: pathToFileURL(pathMod.resolve('tests/fixtures/keyboard/orden-ok.html')).href, waitFor: 'load' });
   assert.equal(result.keyboard, undefined);
 });
+
+test('scanUrl con captureKeyboard cierra el banner de cookies antes del recorrido y lo registra', async () => {
+  const { pathToFileURL } = await import('node:url');
+  const pathMod = await import('node:path');
+  const result = await scanUrl({ url: pathToFileURL(pathMod.resolve('tests/fixtures/keyboard/banner-cookies.html')).href, captureKeyboard: true, waitFor: 'load' });
+  assert.deepEqual(result.keyboard.consent_banner, { detected: true, dismissed: true, action: 'Rechazar' });
+  assert.deepEqual(result.keyboard.stops.map((s) => s.name), ['Inicio', 'Productos', 'Contacto']);
+  // axe-core corrió antes, con el banner presente: el banner igual se audita.
+  assert.ok([...result.passes, ...result.violations].some((r) => r.id === 'button-name'));
+});
