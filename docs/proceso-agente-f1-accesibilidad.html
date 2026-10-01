@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Entidad Financiera — Auditoría de Accesibilidad con IA</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f3f4f6;color:#1a202c;font-size:13px}
+.top-header{background:#13056D;padding:18px 32px;display:flex;align-items:center;justify-content:space-between}
+.top-title{color:#fff;font-size:1.1rem;font-weight:700;letter-spacing:-.02em}
+.top-sub{color:#B9B4D4;font-size:.65rem;margin-top:3px}
+.top-badge{background:#58A333;color:#fff;font-size:.6rem;font-weight:700;padding:3px 12px;border-radius:20px;text-transform:uppercase;letter-spacing:.05em}
+.section-lbl{padding:18px 32px 10px;font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#9ca3af;display:flex;align-items:center;gap:10px}
+.section-lbl::after{content:'';flex:1;height:1px;background:#e5e7eb}
+.phases-wrap{padding:0 24px 24px;display:grid;gap:12px}
+.phase-card{border-radius:10px;border:1.5px solid;overflow:hidden;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.06);transition:transform .15s,box-shadow .15s}
+.phase-card:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(0,0,0,.1)}
+.phase-card-hdr{padding:11px 13px 9px;border-bottom:1px solid}
+.phase-card-tag{font-size:.58rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;opacity:.8;margin-bottom:3px}
+.phase-card-title{font-size:.8rem;font-weight:700;line-height:1.25}
+.phase-card-body{padding:10px 13px}
+.step-row{display:flex;gap:7px;padding:4px 0;border-bottom:1px solid #f3f4f6;align-items:flex-start}
+.step-row:last-child{border-bottom:none}
+.step-n{font-size:.63rem;font-weight:700;flex-shrink:0;min-width:22px;margin-top:.5px}
+.step-txt{font-size:.65rem;color:#374151;line-height:1.35}
+.pc-1{border-color:#13056D}.pc-1 .phase-card-hdr{background:#E8E6F1;border-bottom-color:#B9B4D4}.pc-1 .phase-card-tag{color:#13056D}.pc-1 .phase-card-title{color:#13056D}.pc-1 .step-n{color:#13056D}
+.pc-2{border-color:#0389FE}.pc-2 .phase-card-hdr{background:#EAF4FF;border-bottom-color:#93CEFD}.pc-2 .phase-card-tag{color:#0269C8}.pc-2 .phase-card-title{color:#0269C8}.pc-2 .step-n{color:#0389FE}
+.pc-3{border-color:#58A333}.pc-3 .phase-card-hdr{background:#EFF6EB;border-bottom-color:#BCDAAD}.pc-3 .phase-card-tag{color:#3d7024}.pc-3 .phase-card-title{color:#3d7024}.pc-3 .step-n{color:#58A333}
+.pc-4{border-color:#5A5099}.pc-4 .phase-card-hdr{background:#EDEAF7;border-bottom-color:#C4BFDF}.pc-4 .phase-card-tag{color:#3C3489}.pc-4 .phase-card-title{color:#3C3489}.pc-4 .step-n{color:#5A5099}
+.pc-5{border-color:#283339}.pc-5 .phase-card-hdr{background:#EAEBEC;border-bottom-color:#BFC2C4}.pc-5 .phase-card-tag{color:#283339}.pc-5 .phase-card-title{color:#283339}.pc-5 .step-n{color:#44565E}
+.pc-6{border-color:#3d7024}.pc-6 .phase-card-hdr{background:#EFF6EB;border-bottom-color:#8BBF71}.pc-6 .phase-card-tag{color:#3d7024}.pc-6 .phase-card-title{color:#27500A}.pc-6 .step-n{color:#58A333}
+.flow-section{margin:0 24px 24px}
+.flow-wrap{background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;padding:20px 24px;overflow-x:auto}
+.flow-title{font-size:.82rem;font-weight:700;color:#13056D;text-align:center;margin-bottom:3px}
+.flow-sub{font-size:.62rem;color:#9ca3af;text-align:center;margin-bottom:18px}
+.legend-bar{background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:7px 16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+.leg-i{display:flex;align-items:center;gap:5px;font-size:.6rem;color:#6b7280}
+.unified-flow{display:flex;align-items:flex-start;min-width:max-content;gap:0;padding-bottom:8px;padding-top:70px}
+.slot{display:flex;flex-direction:column;align-items:center;flex-shrink:0}
+.slot-main{height:108px;display:flex;align-items:center;justify-content:center}
+.arr-slot .slot-main{width:28px}
+.nd{display:flex;flex-direction:column;align-items:center;gap:3px;flex-shrink:0}
+.nd-phase{font-size:.5rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:2px 7px;border-radius:10px;margin-bottom:1px;white-space:nowrap}
+.nd-step{font-size:.5rem;color:#9ca3af;margin-top:1px}
+.f1-chip{background:#E8E6F1;color:#13056D}
+.f2-chip{background:#EAF4FF;color:#0389FE}
+.f3-chip{background:#EFF6EB;color:#58A333}
+.f4-chip{background:#EDEAF7;color:#5A5099}
+.f5-chip{background:#EAEBEC;color:#283339}
+.f6-chip{background:#EFF6EB;color:#3d7024}
+.box{border-radius:7px;border:1.5px solid;padding:7px 9px;font-size:.64rem;font-weight:600;text-align:center;line-height:1.35;width:106px;flex-shrink:0;cursor:default;transition:box-shadow .15s;position:relative;z-index:2}
+.box:hover{box-shadow:0 3px 12px rgba(0,0,0,.15);z-index:50}
+.box[data-tip]:hover::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:#111827;color:#fff;font-size:.57rem;font-weight:400;padding:6px 10px;border-radius:5px;white-space:normal;width:230px;text-align:left;z-index:99;line-height:1.5;box-shadow:0 4px 12px rgba(0,0,0,.3);pointer-events:none}
+.box-start{background:#E8E6F1;border-color:#13056D;color:#13056D;width:84px;border-radius:40px;padding:7px 6px;font-size:.62rem}
+.box-end-ok{background:#EFF6EB;border-color:#58A333;color:#3d7024;width:96px;border-radius:40px;padding:7px 6px;border-width:2.5px;font-size:.62rem}
+.s-f1{background:#E8E6F1;border-color:#13056D;color:#13056D}
+.s-f2{background:#EAF4FF;border-color:#0389FE;color:#0269C8}
+.s-f3{background:#EFF6EB;border-color:#58A333;color:#3d7024}
+.s-f4{background:#EDEAF7;border-color:#5A5099;color:#3C3489}
+.s-f5{background:#EAEBEC;border-color:#283339;color:#283339}
+.s-f6{background:#EFF6EB;border-color:#3d7024;color:#27500A}
+.s-red{background:#fef2f2;border-color:#dc2626;color:#991b1b}
+.s-amber{background:#fffbeb;border-color:#d97706;color:#92400e}
+.s-offline{background:#EDEAF7;border-color:#5A5099;color:#3C3489}
+.exc-box{width:118px;font-size:.6rem;font-weight:500;padding:6px 8px}
+.exc-box.s-red{font-weight:600}
+.dm-wrap{width:68px;height:54px;position:relative;flex-shrink:0;display:flex;align-items:center;justify-content:center;z-index:2}
+.dm{width:44px;height:44px;border-radius:3px;transform:rotate(45deg);position:absolute}
+.dm-txt{position:absolute;font-size:.5rem;font-weight:700;text-align:center;width:50px;line-height:1.2;z-index:3;pointer-events:none}
+.dm-ok .dm{background:#EFF6EB;border:1.5px solid #58A333}
+.dm-ok .dm-txt{color:#3d7024}
+.dec-yes{font-size:.5rem;color:#3d7024;font-weight:700;text-align:center}
+.dec-no{font-size:.5rem;color:#dc2626;font-weight:700;text-align:center;margin-bottom:2px}
+.exc-branch{display:flex;flex-direction:column;align-items:center;margin-top:0}
+.exc-tag{background:#fef2f2;color:#dc2626;border:1px solid #fecaca;padding:2px 7px;border-radius:10px;font-size:.55rem;font-weight:700;margin-bottom:3px}
+.exc-outcome{font-size:.54rem;color:#9ca3af;font-style:italic;text-align:center;max-width:118px;line-height:1.4;margin-top:4px;padding:3px 0;border-top:1px dashed #e5e7eb}
+.exc-resume{font-size:.54rem;color:#3d7024;font-weight:700;text-align:center;background:#EFF6EB;border:1px solid #BCDAAD;border-radius:20px;padding:2px 9px;margin-top:2px}
+.vl{width:2px;flex-shrink:0}
+.vl-red{background:#dc2626;height:14px}
+.vl-amber{height:14px;background:repeating-linear-gradient(to bottom,#d97706 0,#d97706 4px,transparent 4px,transparent 7px)}
+.vl-green{height:14px;background:repeating-linear-gradient(to bottom,#58A333 0,#58A333 4px,transparent 4px,transparent 7px)}
+.offline-note{margin-top:4px;background:#F5F3FF;border:1px dashed #5A5099;border-radius:6px;padding:5px 8px;font-size:.56rem;color:#3C3489;text-align:center;max-width:106px;line-height:1.4}
+.offline-note strong{display:block;margin-bottom:2px;font-size:.58rem}
+svg.arr-h{display:block;flex-shrink:0}
+.page-footer{text-align:center;font-size:.6rem;color:#9ca3af;padding:16px 24px 24px;border-top:1px solid #e5e7eb;margin-top:4px;display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap}
+.footer-brand{color:#13056D;font-weight:700;font-size:.64rem}
+
+/* ③ Comportamiento del agente */
+.beh-wrap{margin:0 24px 24px;display:grid;gap:12px}
+.beh-card{background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;padding:16px 20px}
+.beh-h{font-size:.8rem;font-weight:700;color:#13056D;margin-bottom:4px}
+.beh-p{font-size:.66rem;color:#6b7280;margin-bottom:12px;line-height:1.5}
+.cycle{display:flex;align-items:stretch;gap:0;flex-wrap:wrap}
+.cyc{flex:1;min-width:150px;background:#E8E6F1;border:1.5px solid #13056D;border-radius:9px;padding:10px 12px}
+.cyc-n{font-size:.58rem;font-weight:700;color:#5A5099;text-transform:uppercase;letter-spacing:.06em}
+.cyc-t{font-size:.74rem;font-weight:700;color:#13056D;margin:2px 0 4px}
+.cyc-d{font-size:.63rem;color:#374151;line-height:1.4}
+.cyc-arr{display:flex;align-items:center;justify-content:center;width:26px;color:#58A333;font-weight:700;font-size:1rem}
+.cyc-loop{margin-top:10px;font-size:.64rem;color:#3d7024;background:#EFF6EB;border:1px solid #BCDAAD;border-radius:20px;padding:4px 12px;display:inline-block;font-weight:600}
+.quote{margin-top:10px;font-size:.66rem;color:#13056D;border-left:3px solid #58A333;padding:4px 10px;font-style:italic;background:#f9fafb}
+.states{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.st{border-radius:9px;border:1.5px solid;padding:10px 12px}
+.st-t{font-size:.72rem;font-weight:700;margin-bottom:3px}
+.st-d{font-size:.63rem;color:#374151;line-height:1.4}
+.st-ok{background:#EFF6EB;border-color:#58A333}.st-ok .st-t{color:#3d7024}
+.st-bl{background:#fffbeb;border-color:#d97706}.st-bl .st-t{color:#92400e}
+.st-fa{background:#fef2f2;border-color:#dc2626}.st-fa .st-t{color:#991b1b}
+.st-ca{background:#EAEBEC;border-color:#283339}.st-ca .st-t{color:#283339}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.rl{list-style:none}
+.rl li{display:flex;gap:8px;padding:6px 0;border-bottom:1px solid #f3f4f6;font-size:.65rem;color:#374151;line-height:1.45}
+.rl li:last-child{border-bottom:none}
+.rl b{color:#13056D}
+.ic{flex-shrink:0;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:700}
+.ic-a{background:#fffbeb;color:#d97706;border:1px solid #d97706}
+.ic-g{background:#EFF6EB;color:#3d7024;border:1px solid #58A333}
+.ic-p{background:#EDEAF7;color:#5A5099;border:1px solid #5A5099}
+.crit{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.cr{font-size:.58rem;font-weight:700;padding:2px 8px;border-radius:10px}
+.cr-c{background:#fef2f2;color:#991b1b;border:1px solid #dc2626}
+.cr-a{background:#fff7ed;color:#9a3412;border:1px solid #ea580c}
+.cr-m{background:#fffbeb;color:#92400e;border:1px solid #d97706}
+.cr-b{background:#EFF6EB;color:#3d7024;border:1px solid #58A333}
+.gap-card{background:#fffbeb;border:1.5px dashed #d97706;border-radius:12px;padding:14px 20px}
+.gap-card .beh-h{color:#92400e}
+@media (max-width:900px){.states{grid-template-columns:1fr 1fr}.two{grid-template-columns:1fr}.cyc-arr{display:none}}
+</style>
+</head>
+<body>
+
+<div class="top-header">
+  <div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+      <span style="color:#67E89B;font-size:.72rem;font-weight:700">CFOTech IT Global Services</span>
+      <span style="color:#5A5099;font-size:.7rem">×</span>
+      <span style="color:#B9B4D4;font-size:.7rem;font-weight:600">Entidad Financiera</span>
+    </div>
+    <div class="top-title">Auditoría de Accesibilidad Digital con Agente de IA</div>
+    <div class="top-sub">Cómo funciona el servicio, de la solicitud a la entrega · 6 etapas · Camino habitual y situaciones especiales · Normativa BCRA y ONTI (mínimo 30 de 38 criterios)</div>
+  </div>
+  <span class="top-badge">Borrador v3 · Sep 2026</span>
+</div>
+
+<div class="section-lbl">① Etapas del proceso y qué ocurre en cada una</div>
+<div class="phases-wrap" style="grid-template-columns:repeat(6,1fr)">
+  <div class="phase-card pc-1">
+    <div class="phase-card-hdr"><div class="phase-card-tag">Etapa 1 · Solicitud</div><div class="phase-card-title">Pedido de auditoría</div></div>
+    <div class="phase-card-body">
+      <div class="step-row"><span class="step-n">1.1</span><span class="step-txt">Se elige el canal a auditar: Home Banking, app iOS o app Android</span></div>
+      <div class="step-row"><span class="step-n">1.2</span><span class="step-txt">Se define el alcance: todo el canal o una lista de pantallas puntuales</span></div>
+      <div class="step-row"><span class="step-n">1.3</span><span class="step-txt">Si hay zonas con login, se cargan usuarios de prueba</span></div>
+      <div class="step-row"><span class="step-n">1.4</span><span class="step-txt">El sistema verifica que el pedido esté completo y lanza la auditoría</span></div>
+    </div>
+  </div>
+  <div class="phase-card pc-2">
+    <div class="phase-card-hdr"><div class="phase-card-tag">Etapa 2 · Relevamiento</div><div class="phase-card-title">Mapa de pantallas</div></div>
+    <div class="phase-card-body">
+      <div class="step-row"><span class="step-n">2.1</span><span class="step-txt">El agente recorre el canal e identifica todas las pantallas</span></div>
+      <div class="step-row"><span class="step-n">2.2</span><span class="step-txt">Verifica que cada pantalla esté disponible</span></div>
+      <div class="step-row"><span class="step-n">2.3</span><span class="step-txt">Descarta las que no responden y lo deja registrado</span></div>
+      <div class="step-row"><span class="step-n">2.4</span><span class="step-txt">Organiza el orden de revisión</span></div>
+    </div>
+  </div>
+  <div class="phase-card pc-3">
+    <div class="phase-card-hdr"><div class="phase-card-tag">Etapa 3 · Control normativo</div><div class="phase-card-title">Revisión automática</div></div>
+    <div class="phase-card-body">
+      <div class="step-row"><span class="step-n">3.1</span><span class="step-txt">Revisa cada pantalla contra los 38 criterios exigidos por ONTI / BCRA</span></div>
+      <div class="step-row"><span class="step-n">3.2</span><span class="step-txt">Detecta barreras: imágenes sin descripción, formularios sin etiquetas, colores poco legibles</span></div>
+      <div class="step-row"><span class="step-n">3.3</span><span class="step-txt">Guarda una captura de cada pantalla como evidencia</span></div>
+      <div class="step-row"><span class="step-n">3.4</span><span class="step-txt">Marca lo que necesita validación de una persona</span></div>
+    </div>
+  </div>
+  <div class="phase-card pc-4">
+    <div class="phase-card-hdr"><div class="phase-card-tag">Etapa 4 · Mirada experta</div><div class="phase-card-title">Revisión con IA</div></div>
+    <div class="phase-card-body">
+      <div class="step-row"><span class="step-n">4.1</span><span class="step-txt">La IA mira la pantalla como un usuario: legibilidad y tamaño de botones</span></div>
+      <div class="step-row"><span class="step-n">4.2</span><span class="step-txt">Evalúa si formularios y mensajes de error son claros y consistentes</span></div>
+      <div class="step-row"><span class="step-n">4.3</span><span class="step-txt">Suma hallazgos que el control automático no puede ver</span></div>
+    </div>
+  </div>
+  <div class="phase-card pc-5">
+    <div class="phase-card-hdr"><div class="phase-card-tag">Etapa 5 · Diagnóstico</div><div class="phase-card-title">Evaluación y puntaje</div></div>
+    <div class="phase-card-body">
+      <div class="step-row"><span class="step-n">5.1</span><span class="step-txt">Unifica hallazgos repetidos y los asocia a cada criterio</span></div>
+      <div class="step-row"><span class="step-n">5.2</span><span class="step-txt">Define el estado de cada criterio: cumple, no cumple, a validar o no aplica</span></div>
+      <div class="step-row"><span class="step-n">5.3</span><span class="step-txt">Calcula el puntaje: cuántos de los 38 criterios se cumplen (mínimo 30)</span></div>
+      <div class="step-row"><span class="step-n">5.4</span><span class="step-txt">Prioriza cada hallazgo: Crítico, Alto, Medio o Bajo</span></div>
+    </div>
+  </div>
+  <div class="phase-card pc-6">
+    <div class="phase-card-hdr"><div class="phase-card-tag">Etapa 6 · Entrega</div><div class="phase-card-title">Informes y resultados</div></div>
+    <div class="phase-card-body">
+      <div class="step-row"><span class="step-n">6.1</span><span class="step-txt">Puntaje de cumplimiento y tablero ejecutivo para la Dirección</span></div>
+      <div class="step-row"><span class="step-n">6.2</span><span class="step-txt">Listado de hallazgos y matriz de criticidad (también en Excel) para equipos técnicos y de producto</span></div>
+      <div class="step-row"><span class="step-n">6.3</span><span class="step-txt">Plan de corrección priorizado e informe narrativo</span></div>
+      <div class="step-row"><span class="step-n">6.4</span><span class="step-txt">Control de que todo esté completo y aviso de resultados disponibles</span></div>
+      <div class="step-row"><span class="step-n">6.5</span><span class="step-txt">Visión integrada de los 3 canales en un único tablero</span></div>
+    </div>
+  </div>
+</div>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <marker id="aok"   markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#58A333"/></marker>
+    <marker id="abad"  markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#dc2626"/></marker>
+    <marker id="awarn" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#d97706"/></marker>
+    <marker id="agray" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#9ca3af"/></marker>
+  </defs>
+</svg>
+
+<div class="section-lbl">② Recorrido completo — Camino habitual y situaciones especiales</div>
+<div class="flow-section">
+<div class="flow-wrap">
+  <div class="flow-title">Recorrido de una auditoría de accesibilidad — de la solicitud a la entrega</div>
+  <div class="flow-sub">Cada auditoría cubre un canal · Camino habitual (→ verde) · Situación especial (↓ rojo/ámbar) · Pasá el mouse sobre cada paso para ver el detalle</div>
+
+  <div class="legend-bar">
+    <span style="font-size:.62rem;font-weight:700;color:#374151;margin-right:2px">Etapas:</span>
+    <div class="leg-i"><div style="width:10px;height:10px;border-radius:2px;background:#E8E6F1;border:1.5px solid #13056D"></div>1 Solicitud</div>
+    <div class="leg-i"><div style="width:10px;height:10px;border-radius:2px;background:#EAF4FF;border:1.5px solid #0389FE"></div>2 Relevamiento</div>
+    <div class="leg-i"><div style="width:10px;height:10px;border-radius:2px;background:#EFF6EB;border:1.5px solid #58A333"></div>3 Control normativo</div>
+    <div class="leg-i"><div style="width:10px;height:10px;border-radius:2px;background:#EDEAF7;border:1.5px solid #5A5099"></div>4 Revisión con IA</div>
+    <div class="leg-i"><div style="width:10px;height:10px;border-radius:2px;background:#EAEBEC;border:1.5px solid #283339"></div>5 Diagnóstico</div>
+    <div class="leg-i"><div style="width:10px;height:10px;border-radius:2px;background:#EFF6EB;border:1.5px solid #3d7024"></div>6 Entrega</div>
+    <div style="width:1px;height:14px;background:#e5e7eb;margin:0 4px"></div>
+    <div class="leg-i"><svg width="24" height="10"><line x1="0" y1="5" x2="20" y2="5" stroke="#58A333" stroke-width="2" marker-end="url(#aok)"/></svg>Camino habitual</div>
+    <div class="leg-i"><svg width="24" height="10"><line x1="0" y1="5" x2="20" y2="5" stroke="#dc2626" stroke-width="2" stroke-dasharray="4,2" marker-end="url(#abad)"/></svg>Situación especial</div>
+    <div class="leg-i"><div style="width:10px;height:10px;background:#fffbeb;border:1.5px solid #d97706;transform:rotate(45deg)"></div>Punto de control</div>
+  </div>
+
+  <div class="unified-flow">
+    <div class="slot"><div class="slot-main"><div class="nd">
+      <div class="box box-start" data-tip="Un consultor de CFOTech o un responsable de la Entidad pide auditar un canal digital.">Solicitud de<br>auditoría</div>
+      <div class="nd-step">Inicio</div>
+    </div></div></div>
+    <div class="slot arr-slot"><div class="slot-main"><svg class="arr-h" width="28" height="22"><line x1="0" y1="11" x2="24" y2="11" stroke="#58A333" stroke-width="2" marker-end="url(#aok)"/></svg></div></div>
+
+    <div class="slot"><div class="slot-main"><div class="nd">
+      <div class="nd-phase f1-chip">Etapa 1</div>
+      <div class="box s-f1" data-tip="Se indica qué canal auditar, si se revisa todo o solo algunas pantallas, y los usuarios de prueba para entrar a las zonas con login.">Definir canal<br>y alcance</div>
+      <div class="nd-step">1.1 – 1.3</div>
+    </div></div></div>
+    <div class="slot arr-slot"><div class="slot-main"><svg class="arr-h" width="28" height="22"><line x1="0" y1="11" x2="24" y2="11" stroke="#58A333" stroke-width="2" marker-end="url(#aok)"/></svg></div></div>
+
+    <div class="slot">
+      <div class="slot-main"><div class="nd">
+        <div class="dm-wrap dm-ok"><div class="dm"></div><div class="dm-txt">¿Pedido<br>completo?</div></div>
+        <div class="dec-yes">✓ Sí →</div>
+      </div></div>
+      <div class="exc-branch">
+        <div class="dec-no">✕ No</div>
+        <div class="vl vl-red"></div>
+        <div class="exc-tag">E1</div>
+        <div class="box s-red exc-box">Faltan datos o<br>hay inconsistencias</div>
+        <div class="vl vl-amber"></div>
+        <div class="box s-amber exc-box">Se consulta al<br>solicitante</div>
+        <div class="vl vl-green"></div>
+        <div class="exc-resume">↩ Retoma en 1.1</div>
+        <div class="exc-outcome">La auditoría queda en espera hasta que se completen los datos.</div>
+      </div>
+    </div>
+    <div class="slot arr-slot"><div class="slot-main"><svg class="arr-h" width="28" height="22"><line x1="0" y1="11" x2="24" y2="11" stroke="#58A333" stroke-width="2" marker-end="url(#aok)"/></svg></div></div>
+
+    <div class="slot">
+      <div class="slot-main"><div class="nd">
+        <div class="nd-phase f1-chip">Etapa 1</div>
+        <div class="box s-f1" data-tip="Desde acá el agente trabaja solo: decide cada paso y verifica el resultado real antes de seguir.">Arranca la<br>auditoría</div>
+        <div class="nd-step">1.4</div>
+      </div></div>
+      <div class="exc-branch">
+        <div style="height:10px;width:2px;background:#C4BFDF"></div>
+        <div class="exc-tag" style="background:#EDEAF7;color:#5A5099;border-color:#C4BFDF">E5 · Resguardo</div>
+        <div class="offline-note"><strong>Control de avance</strong>Si el agente deja de avanzar, detiene la auditoría y avisa.</div>
+      </div>
+    </div>
+    <div class="slot arr-slot"><div class="slot-main"><svg class="arr-h" width="28" height="22"><line x1="0" y1="11" x2="24" y2="11" stroke="#58A333" stroke-width="2" marker-end="url(#aok)"/></svg></div></div>
+
+    <div class="slot"><div class="slot-main"><div class="nd">
+      <div class="nd-phase f2-chip">Etapa 2</div>
+      <div class="box s-f2" data-tip="El agente recorre el canal como un visitante, arma el mapa de pantallas y descarta las que no están disponibles.">Relevar<br>pantallas</div>
+      <div class="nd-step">2.1 – 2.3</div>
+    </div></div></div>
+    <div class="slot arr-slot"><div class="slot-main"><svg class="arr-h" width="28" height="22"><line x1="0" y1="11" x2="24" y2="11" stroke="#58A333" stroke-width="2" marker-end="url(#aok)"/></svg></div></div>
+
+    <div class="slot"><div class="slot-main"><div class="nd">
+      <div class="nd-phase f2-chip">Etapa 2</div>
+      <div class="box s-f2" data-tip="Define en qué orden y cuántas pantallas revisar en simultáneo para terminar en el menor tiempo posible.">Organizar la<br>revisión</div>
+      <div class="nd-step">2.4</div>
+    </div></div></div>
+    <div class="slot arr-slot"><div class="slot-main"><svg class="arr-h" width="28" height="22"><line x1="0" y1="11" x2="24" y2="11" stroke="#58A333" stroke-width="2" marker-end="url(#aok)"/></svg></div></div>
+
+    <div class="slot"><div class="slot-main"><div class="nd">
+      <div class="nd-phase f3-chip">Etapa 3</div>
+      <div class="box s-f3" data-tip="Cada pantalla se controla contra los 38 criterios de la normativa ONTI / BCRA, con el mismo estándar internacional (WCAG) de las auditorías profesionales.">Controlar<br>normativa</div>
+      <div class="nd-step">3.1 – 3.4</div>
+    </div></div></div>
+    <div class="slot arr-slot"><div class="slot-main"><svg class="arr-h" width="28" height="22"><line x1="0" y1="11" x2="24" y2="11" stroke="#58A333" stroke-width="2" marker-end="url(#aok)"/></svg></div></div>
+
+    <div class="slot">
+      <div class="slot-main"><div class="nd">
+        <div class="dm-wrap dm-ok"><div class="dm"></div><div class="dm-txt">¿Pantalla<br>accesible?</div></div>
+        <div class="dec-yes">✓ Sí →</div>
+      </div></div>
+      <div class="exc-branch">
+        <div class="dec-no">✕ No</div>
+        <div class="vl vl-red"></div>
+        <div class="exc-tag">E2</div>
+        <div class="box s-red exc-box">No carga o<br>pide ingresar</div>
+        <div class="vl vl-amber"></div>
+        <div class="box s-amber exc-box">Reintenta o pide<br>usuario de prueba</div>
+        <div class="vl vl-green"></div>
+        <div class="exc-resume">↩ Retoma control</div>
+        <div class="exc-outcome">Si pide clave o código de seguridad, espera la respuesta del solicitante.</div>
+      </div>
+    </div>
+    <div class="slot arr-slot"><div class="slot-main"><svg class="arr-h" width="28" height="22"><line x1="0" y1="11" x2="24" y2="11" stroke="#58A333" stroke-width="2" marker-end="url(#aok)"/></svg></div></div>
+
+    <div class="slot">
+      <div class="slot-main"><div class="nd">
+        <div class="nd-phase f4-chip">Etapa 4</div>
+        <div class="box s-f4" data-tip="La IA mira cada pantalla como lo haría una persona: textos difíciles de leer, botones chicos para tocar, mensajes de error confusos.">Revisión<br>experta con IA</div>
+        <div class="nd-step">4.1 – 4.3</div>
+      </div></div>
+      <div class="exc-branch">
+        <div style="height:10px;width:2px;background:#C4BFDF"></div>
+        <div class="exc-tag" style="background:#EDEAF7;color:#5A5099;border-color:#C4BFDF">E6 · Resguardo</div>
+        <div class="offline-note"><strong>IA no disponible</strong>Se sigue sin este paso y se aclara en el informe.</div>
+      </div>
+    </div>
+    <div class="slot arr-slot"><div class="slot-main"><svg class="arr-h" width="28" height="22"><line x1="0" y1="11" x2="24" y2="11" stroke="#58A333" stroke-width="2" marker-end="url(#aok)"/></svg></div></div>
+
+    <div class="slot">
+      <div class="slot-main"><div class="nd">
+        <div class="nd-phase f5-chip">Etapa 5</div>
+        <div class="box s-f5" data-tip="Junta todos los hallazgos, elimina repetidos y define para cada criterio si cumple, no cumple, queda a validar o no aplica al canal.">Consolidar<br>hallazgos</div>
+        <div class="nd-step">5.1 – 5.2</div>
+      </div></div>
+      <div class="exc-branch">
+        <div style="height:10px;width:2px;background:#C4BFDF"></div>
+        <div class="exc-tag" style="background:#EDEAF7;color:#5A5099;border-color:#C4BFDF">E7 · Criterio</div>
+        <div class="offline-note"><strong>Sin supuestos</strong>Lo que no puede confirmarse queda "a validar" por un especialista.</div>
+      </div>
+    </div>
+    <div class="slot arr-slot"><div class="slot-main"><svg class="arr-h" width="28" height="22"><line x1="0" y1="11" x2="24" y2="11" stroke="#58A333" stroke-width="2" marker-end="url(#aok)"/></svg></div></div>
+
+    <div class="slot"><div class="slot-main"><div class="nd">
+      <div class="nd-phase f5-chip">Etapa 5</div>
+      <div class="box s-f5" data-tip="Resultado: cuántos de los 38 criterios se cumplen (la norma exige al menos 30) y la prioridad de cada hallazgo: Crítico, Alto, Medio o Bajo.">Puntaje y<br>prioridades</div>
+      <div class="nd-step">5.3 – 5.4</div>
+    </div></div></div>
+    <div class="slot arr-slot"><div class="slot-main"><svg class="arr-h" width="28" height="22"><line x1="0" y1="11" x2="24" y2="11" stroke="#58A333" stroke-width="2" marker-end="url(#aok)"/></svg></div></div>
+
+    <div class="slot">
+      <div class="slot-main"><div class="nd">
+        <div class="dm-wrap dm-ok"><div class="dm"></div><div class="dm-txt">¿Revisión<br>suficiente?</div></div>
+        <div class="dec-yes">✓ Sí →</div>
+      </div></div>
+      <div class="exc-branch">
+        <div class="dec-no">✕ No</div>
+        <div class="vl vl-red"></div>
+        <div class="exc-tag">E3</div>
+        <div class="box s-red exc-box">Se revisó menos del<br>80% de pantallas</div>
+        <div class="vl vl-amber"></div>
+        <div class="box s-amber exc-box">Se advierte en<br>el informe</div>
+        <div class="vl vl-green"></div>
+        <div class="exc-resume">↩ Continúa</div>
+        <div class="exc-outcome">El resultado se entrega igual, con la aclaración visible de alcance parcial.</div>
+      </div>
+    </div>
+    <div class="slot arr-slot"><div class="slot-main"><svg class="arr-h" width="28" height="22"><line x1="0" y1="11" x2="24" y2="11" stroke="#58A333" stroke-width="2" marker-end="url(#aok)"/></svg></div></div>
+
+    <div class="slot"><div class="slot-main"><div class="nd">
+      <div class="nd-phase f6-chip">Etapa 6</div>
+      <div class="box s-f6" data-tip="Se generan los informes: puntaje, tablero ejecutivo, listado de hallazgos, matriz de criticidad, plan de corrección e informe narrativo.">Preparar<br>informes</div>
+      <div class="nd-step">6.1 – 6.3</div>
+    </div></div></div>
+    <div class="slot arr-slot"><div class="slot-main"><svg class="arr-h" width="28" height="22"><line x1="0" y1="11" x2="24" y2="11" stroke="#58A333" stroke-width="2" marker-end="url(#aok)"/></svg></div></div>
+
+    <div class="slot">
+      <div class="slot-main"><div class="nd">
+        <div class="dm-wrap dm-ok"><div class="dm"></div><div class="dm-txt">¿Informes<br>completos?</div></div>
+        <div class="dec-yes">✓ Sí →</div>
+      </div></div>
+      <div class="exc-branch">
+        <div class="dec-no">✕ No</div>
+        <div class="vl vl-red"></div>
+        <div class="exc-tag">E4</div>
+        <div class="box s-red exc-box">Falta un informe<br>o está vacío</div>
+        <div class="vl vl-amber"></div>
+        <div class="box s-amber exc-box">Se vuelve a<br>generar</div>
+        <div class="vl vl-green"></div>
+        <div class="exc-resume">↩ Retoma en 6.1</div>
+        <div class="exc-outcome">Antes de reemplazar informes anteriores, se pide confirmación.</div>
+      </div>
+    </div>
+    <div class="slot arr-slot"><div class="slot-main"><svg class="arr-h" width="28" height="22"><line x1="0" y1="11" x2="24" y2="11" stroke="#58A333" stroke-width="2" marker-end="url(#aok)"/></svg></div></div>
+
+    <div class="slot"><div class="slot-main"><div class="nd">
+      <div class="nd-phase f6-chip">Etapa 6</div>
+      <div class="box s-f6" data-tip="La auditoría del canal se da por terminada y los informes quedan disponibles para descargar.">Resultados<br>disponibles</div>
+      <div class="nd-step">6.4</div>
+    </div></div></div>
+    <div class="slot arr-slot"><div class="slot-main"><svg class="arr-h" width="28" height="22"><line x1="0" y1="11" x2="24" y2="11" stroke="#58A333" stroke-width="2" marker-end="url(#aok)"/></svg></div></div>
+
+    <div class="slot">
+      <div class="slot-main"><div class="nd">
+        <div class="nd-phase f6-chip">Etapa 6</div>
+        <div class="box s-f6" data-tip="Cuando están auditados Home Banking, iOS y Android, se arma un tablero único con el puntaje global de la Entidad.">Visión de los<br>3 canales</div>
+        <div class="nd-step">6.5 · opcional</div>
+      </div></div>
+      <div class="exc-branch">
+        <div style="height:10px;width:2px;background:#C4BFDF"></div>
+        <div class="exc-tag" style="background:#EDEAF7;color:#5A5099;border-color:#C4BFDF">E8 · Opcional</div>
+        <div class="offline-note"><strong>Solo con varios canales</strong>Requiere que todas las auditorías estén terminadas.</div>
+      </div>
+    </div>
+    <div class="slot arr-slot"><div class="slot-main"><svg class="arr-h" width="28" height="22"><line x1="0" y1="11" x2="24" y2="11" stroke="#58A333" stroke-width="2" marker-end="url(#aok)"/></svg></div></div>
+
+    <div class="slot"><div class="slot-main"><div class="nd">
+      <div class="box box-end-ok" data-tip="La Entidad recibe su nivel de cumplimiento y un plan de corrección priorizado, que es la base de la Fase 2 (pruebas con lectores de pantalla).">Diagnóstico<br>entregado ✓</div>
+      <div class="nd-step" style="color:#3d7024;font-weight:700">Fin · OK</div>
+    </div></div></div>
+  </div>
+</div>
+</div>
+
+<div class="section-lbl">③ Cómo se comporta el agente</div>
+<div class="beh-wrap">
+
+  <div class="beh-card">
+    <div class="beh-h">Decide solo, paso a paso</div>
+    <div class="beh-p">El agente no sigue un guion fijo. Recibe un objetivo ("auditá este canal") y en cada vuelta decide qué hacer según el resultado real del paso anterior. Tiene 13 herramientas disponibles (recorrer el sitio, revisar pantallas, revisión con IA, puntuar, generar informes, preguntar, etc.) y puede usar varias en la misma vuelta.</div>
+    <div class="cycle">
+      <div class="cyc"><div class="cyc-n">Paso 1</div><div class="cyc-t">Mira</div><div class="cyc-d">Analiza el canal, el pedido y qué pasó en el paso anterior.</div></div>
+      <div class="cyc-arr">→</div>
+      <div class="cyc"><div class="cyc-n">Paso 2</div><div class="cyc-t">Decide</div><div class="cyc-d">Elige qué herramienta usar a continuación y por qué.</div></div>
+      <div class="cyc-arr">→</div>
+      <div class="cyc"><div class="cyc-n">Paso 3</div><div class="cyc-t">Ejecuta</div><div class="cyc-d">Usa la herramienta y recibe el resultado tal como sale, sin adornos.</div></div>
+      <div class="cyc-arr">→</div>
+      <div class="cyc"><div class="cyc-n">Paso 4</div><div class="cyc-t">Evalúa</div><div class="cyc-d">Revisa si salió bien, ajusta el plan y vuelve a empezar.</div></div>
+    </div>
+    <div class="cyc-loop">↻ Repite el ciclo hasta terminar, necesitar a una persona o llegar al límite de 30 vueltas</div>
+    <div class="quote">Regla base del agente: "Nunca asumas éxito: evaluá siempre el resultado real del paso anterior."</div>
+  </div>
+
+  <div class="beh-card">
+    <div class="beh-h">Cómo termina una auditoría</div>
+    <div class="beh-p">Toda auditoría termina en uno de estos cuatro estados.</div>
+    <div class="states">
+      <div class="st st-ok"><div class="st-t">✓ Completada</div><div class="st-d">El agente considera que terminó el trabajo y los informes quedan disponibles.</div></div>
+      <div class="st st-bl"><div class="st-t">⏸ En espera</div><div class="st-d">Necesita algo de una persona (datos faltantes, usuario de prueba, código de seguridad). Queda registrada la pregunta.</div></div>
+      <div class="st st-fa"><div class="st-t">✕ Detenida</div><div class="st-d">Llegó a 30 vueltas sin terminar. Se frena para no consumir recursos sin avanzar.</div></div>
+      <div class="st st-ca"><div class="st-t">■ Cancelada</div><div class="st-d">Alguien la canceló. El agente respeta la cancelación aunque esté trabajando.</div></div>
+    </div>
+  </div>
+
+  <div class="two">
+    <div class="beh-card">
+      <div class="beh-h">Cómo reacciona ante problemas</div>
+      <ul class="rl">
+        <li><span class="ic ic-a">!</span><span><b>Si una herramienta falla</b>, no se cae: toma el error como información y decide si reintentar, saltear o preguntar.</span></li>
+        <li><span class="ic ic-a">!</span><span><b>Si una pantalla no carga</b>, sabe distinguir si fue por demora o porque pide ingresar, y actúa en consecuencia.</span></li>
+        <li><span class="ic ic-g">✓</span><span><b>Si hay zonas con login</b> y tiene usuarios de prueba, entra solo (formulario, credenciales o sesión).</span></li>
+        <li><span class="ic ic-a">!</span><span><b>Si la IA de revisión no está disponible</b>, continúa sin ese paso y lo aclara en el informe.</span></li>
+      </ul>
+    </div>
+    <div class="beh-card">
+      <div class="beh-h">Criterios que aplica al evaluar</div>
+      <ul class="rl">
+        <li><span class="ic ic-p">?</span><span><b>Lo dudoso no cuenta como aprobado.</b> Si no puede confirmar un criterio, queda "a validar" y no suma para el mínimo de 30/38.</span></li>
+        <li><span class="ic ic-p">∅</span><span><b>Lo que no aplica se descuenta.</b> Si el canal no tiene video, esos criterios salen del total y el mínimo se recalcula en proporción.</span></li>
+        <li><span class="ic ic-p">↑</span><span><b>Prioriza cada hallazgo</b> con reglas fijas:
+          <div class="crit"><span class="cr cr-c">Crítico · bloquea al usuario</span><span class="cr cr-a">Alto · grave o repetido en varias pantallas</span><span class="cr cr-m">Medio · puntual</span><span class="cr cr-b">Bajo · menor</span></div></span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="beh-card">
+    <div class="beh-h">Resguardos de seguridad</div>
+    <ul class="rl">
+      <li><span class="ic ic-g">✓</span><span><b>Evidencia protegida:</b> las capturas de cada pantalla se guardan en la carpeta de la auditoría, no circulan en la "conversación" del agente.</span></li>
+      <li><span class="ic ic-g">✓</span><span><b>Acceso acotado:</b> solo puede leer archivos de su propia auditoría, aunque una página intente engañarlo.</span></li>
+      <li><span class="ic ic-g">✓</span><span><b>No se deja manipular:</b> la revisión con IA ignora instrucciones escondidas dentro de las páginas que analiza.</span></li>
+    </ul>
+  </div>
+
+  <div class="gap-card">
+    <div class="beh-h">⚠ Pendientes respecto de la propuesta</div>
+    <ul class="rl">
+      <li><span class="ic ic-a">!</span><span><b>Esfuerzo de corrección:</b> el módulo que lo estima todavía no está construido; el plan de corrección sale con esa columna vacía.</span></li>
+      <li><span class="ic ic-a">!</span><span><b>Controles del 80% de cobertura y de informes completos:</b> hoy dependen del criterio del agente, no son reglas fijas del sistema.</span></li>
+      <li><span class="ic ic-a">!</span><span><b>Auditoría en espera:</b> no hay forma de retomarla una vez respondida la consulta; hay que iniciar una nueva.</span></li>
+    </ul>
+  </div>
+</div>
+
+<div class="page-footer">
+  <span class="footer-brand">CFOTech IT Global Services</span>
+  <span style="color:#e5e7eb">|</span>
+  <span>Entidad Financiera — Auditoría de Accesibilidad Digital con Agente de IA</span>
+  <span style="color:#e5e7eb">|</span>
+  <span>6 etapas · 4 puntos de control · 8 situaciones especiales · Borrador v3 · Sep 2026</span>
+</div>
+
+</body>
+</html>

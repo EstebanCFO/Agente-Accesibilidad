@@ -1,23 +1,10 @@
 # SPEC — Agente Autónomo de Compliance de Accesibilidad · Fase 1
 
 **Proyecto:** CFOTech IT Global Services — Propuesta Entidad Financiera  
-**Versión:** 0.4  
-**Fecha:** Septiembre 2026  
+**Versión:** 0.2  
+**Fecha:** Agosto 2026  
 **Estado:** Pre-construcción — pendiente de aprobación  
-**Cambios v0.2:** Incorporación de skills externos (ui-skills.com + agentskills.io) · Mapeo normativo completo ONTI 38 criterios + WCAG 2.2 · Actualización de arquitectura, tool set, stack y criterios de aceptación  
-**Cambios v0.3 (alineación con Propuesta_Accesibilidad_EntidadFinanciera_v7.pptx):**
-- **Marco normativo base (decisión D6):** el scope primario de F1 es **WCAG 2.0 A+AA — los 38 criterios de la ONTI Disp. 6/2019 (25 A + 13 AA), umbral de conformidad ≥ 30/38**, tal como lo detallan las láminas 9 y 10 de la propuesta. La evaluación y el score del agente se calculan sobre esos 38 criterios.
-- **WCAG 2.2 AA = capa extendida opcional (decisiones D6/D7):** no exigida por BCRA/ONTI. Se activa por config (`wcag.extended_22`); cuando está activa, el agente evalúa además los criterios nuevos de WCAG 2.1/2.2 relevantes para banca con un **score separado** que no altera el % de compliance ONTI. Con la capa desactivada, los hallazgos fuera de los 38 se descartan.
-- Se explicita el umbral regulatorio ONTI: **mínimo 30 de los 38 criterios** (Disp. 6/2019).
-- Modelo del cerebro actualizado a la generación vigente: `claude-sonnet-5` (antes `claude-sonnet-4-5`).
-- Sección 8.4: la "Matriz de Criticidad" se compone de **dos vistas** — matriz de conformidad criterio × módulo (los 38 ONTI) **y** grilla severidad × impacto (decisión D1, confirmada).
-- Sección 8: los entregables se emiten en **JSON + HTML (fuente de verdad) y además XLSX** (inventario, matriz y roadmap) en todos los jobs (decisión D3, confirmada).
-- Sección 15: la limitación de apps nativas se detalla contra el alcance de App Mobile descripto en la propuesta (biometría, gestos táctiles, push, escala de fuente del OS, modo oscuro, orientación).
-- Secciones 6, 8.2, 9, 10 y 16: se incorpora el **paso de consolidación multi-canal** — el agente corre un canal por job y un paso posterior agrega los jobs de HB / iOS / Android en un dashboard ejecutivo unificado con score global (decisión D5, confirmada).
-**Cambios v0.4 (decisión D8 — fuente del score, 2026-09-25):**
-- **El score y todos los entregables se basan exclusivamente en los resultados de axe-core.** Los hallazgos de la revisión del Agente con IA (`visual_audit` y `ux_compliance_review`) pasan a ser un **análisis complementario**: se informan aparte y **no modifican** el estado de los 38 criterios, el % de cumplimiento, el umbral ≥ 30/38, la criticidad ni el orden del roadmap.
-- Motivo: los hallazgos de IA son probabilísticos (pueden tener falsos positivos) y no deben alterar un indicador regulatorio sin validación de un especialista — mismo principio de "nunca asumir" de la Sección 4.2.
-- Secciones 6.2, 8.2, 8.3, 9, 16 y 18.3 actualizadas en consecuencia. La regla se aplica en código en `calculate-score.js` y `generate-deliverable.js` (vía `src/classification/finding-sources.js`), tanto para el loop autónomo como para la demo.
+**Cambios v0.2:** Incorporación de skills externos (ui-skills.com + agentskills.io) · Mapeo normativo completo ONTI 38 criterios + WCAG 2.2 · Actualización de arquitectura, tool set, stack y criterios de aceptación
 
 ---
 
@@ -31,15 +18,14 @@ El agente opera como un **sistema SaaS autónomo**: recibe un objetivo de config
 
 ## 2. Marco Normativo que Cubre
 
-| Normativa | Rol en la evaluación del agente |
+| Normativa | Qué evalúa el agente |
 |---|---|
-| BCRA Com. "A" 7517 | Accesibilidad en canales digitales de entidades financieras. Obligaciones propias (reproductor de texto-a-voz, texto alternativo en avisos y publicidades) **y** remisión "en lo pertinente" a la ONTI |
-| ONTI Disposición 6/2019 | **Marco de referencia del agente.** Adopta WCAG 2.0 y selecciona **38 criterios de éxito** (25 Nivel A + 13 Nivel AA). **Umbral de conformidad: mínimo 30 de los 38** |
-| WCAG 2.0 Nivel A | 25 criterios — obligatorios; bloqueos críticos para usuarios con discapacidad |
-| WCAG 2.0 Nivel AA | 13 criterios adicionales (38 en total) — nivel regulatorio completo exigido |
-| WCAG 2.2 AA | **Capa extendida opcional** (config `wcag.extended_22`). No exigida por BCRA ni ONTI. Se audita solo si la Entidad lo solicita, con score separado que no altera el compliance ONTI |
+| BCRA Com. "A" 7517 | Accesibilidad en canales digitales de entidades financieras |
+| ONTI Disposición 6/2019 | 38 criterios WCAG 2.0 (25 Nivel A + 13 Nivel AA) — marco técnico nacional |
+| WCAG 2.2 Nivel A | 30 criterios — bloqueos críticos para usuarios con discapacidad |
+| WCAG 2.2 Nivel AA | 20 criterios adicionales — nivel regulatorio completo exigido |
 
-El agente evalúa y puntúa contra los **38 criterios WCAG 2.0 A+AA de la ONTI Disp. 6/2019** (umbral ≥ 30/38) como scope primario de F1 — el detalle criterio por criterio está en las láminas 9 y 10 de la propuesta y en la Sección 18.1. Si se activa la capa extendida, el agente evalúa adicionalmente los criterios nuevos de WCAG 2.1/2.2 más relevantes para banca (p. ej. 2.5.8 target size, 2.4.11 foco no obscurecido, 3.3.8 autenticación accesible, 3.2.6 ayuda coherente, 3.3.7 entrada redundante) con un score separado.
+El agente evalúa **WCAG 2.2 Niveles A y AA (50 criterios)** como estándar de referencia técnico. La matriz de criticidad señala adicionalmente cuáles de esos criterios pertenecen a los 38 de la ONTI, dado que el BCRA remite a ese marco nacional.
 
 > Ver Sección 18 para el mapeo normativo completo.
 
@@ -54,8 +40,6 @@ El agente evalúa y puntúa contra los **38 criterios WCAG 2.0 A+AA de la ONTI D
 | App Mobile Android | WebView híbrida | axe-core vía Playwright (modo mobile viewport) |
 
 > **Limitación conocida:** axe-core cubre ~57% de los hallazgos por volumen (fuente GDS UK). Los criterios que requieren evaluación con AT reales (NVDA, JAWS, VoiceOver, TalkBack) pertenecen a F2, fuera del alcance de este agente.
->
-> **Alcance real de App Mobile en F1:** el agente evalúa únicamente la capa WebView / web responsive de las apps híbridas. Los aspectos nativos que la propuesta lista para App Mobile — biometría / FaceID, gestos táctiles, notificaciones push, escala de fuente del OS, modo oscuro, orientación portrait/landscape y las diferencias iOS vs Android — no son verificables por axe-core + Playwright y se cubren en F2 con VoiceOver / TalkBack.
 
 ---
 
@@ -113,7 +97,7 @@ En cada iteración el agente registra:
 │  ┌───────────────────────▼───────────────────────────────┐   │
 │  │              AGENT CORE (cerebro)                      │   │
 │  │                                                        │   │
-│  │  Claude claude-sonnet-5 (API Anthropic)                │   │
+│  │  Claude claude-sonnet-4-5 (API Anthropic)              │   │
 │  │  → recibe estado actual                                │   │
 │  │  → decide qué herramienta llamar                       │   │
 │  │  → evalúa resultado real · ajusta plan                 │   │
@@ -153,8 +137,7 @@ El cerebro (Claude) puede llamar a las siguientes herramientas. Él decide cuál
 | `scan_batch` | url_list[], wcag_tags[], workers | axe_results[] | Escanea múltiples URLs en paralelo (hasta N workers) |
 | `classify_findings` | axe_results[] | classified_findings | Deduplica, agrupa por criterio WCAG y asigna severidad |
 | `calculate_score` | classified_findings | compliance_scores | Calcula % de cumplimiento por canal y por criterio |
-| `generate_deliverable` | type, data | file_path[] | Genera uno de los 5 entregables de F1 en sus formatos (JSON/HTML y, para inventario/matriz/roadmap, también XLSX) |
-| `consolidate_jobs` | job_ids[] | consolidated_report | Agrega los resultados de varios jobs (uno por canal) en un dashboard ejecutivo unificado + score global multi-canal |
+| `generate_deliverable` | type, data | file_path | Genera uno de los 5 entregables de F1 |
 | `request_clarification` | question, context | human_response | Pausa y solicita decisión al operador |
 | `log_progress` | message, level | — | Registra estado en el log del job |
 
@@ -167,8 +150,6 @@ El cerebro (Claude) puede llamar a las siguientes herramientas. Él decide cuál
 | `generate_remediation_plan` | `ibelick/improve-ui` | classified_findings, ux_findings, visual_findings | remediation_plans[] | Genera planes de implementación autocontenidos y priorizados por hallazgo, listos para ser ejecutados por el equipo de desarrollo de la Entidad. Alimenta el Entregable 5 (Roadmap). |
 
 > **Nota de integración:** Las herramientas de skills externos se invocan **después** del scan axe-core, como enriquecimiento de la capa de análisis. No reemplazan al scanner; lo complementan. El agente decide si invocarlas según la cobertura alcanzada por axe-core.
->
-> **Regla de puntaje (v0.4, D8):** los `visual_findings[]` y `ux_findings[]` son **análisis complementario**. Nunca se suman al score ni cambian el estado de un criterio: el score, la matriz, el roadmap y el inventario principal se calculan solo con axe-core. Los hallazgos del Agente se muestran en secciones propias, rotuladas "Análisis complementario del Agente — no afecta el puntaje".
 
 ---
 
@@ -203,12 +184,10 @@ El operador entrega un JSON de configuración al iniciar un job.
   },
 
   "wcag": {
-    "baseline": "onti_2019",
+    "version": "2.2",
     "levels": ["A", "AA"],
-    "base_tags": ["wcag2a", "wcag2aa"],
-    "conformance_threshold": 30,
-    "extended_22": false,
-    "extended_22_tags": ["wcag21a", "wcag21aa", "wcag22aa"]
+    "tags": ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"],
+    "onti_mapping": true
   },
 
   "scope": {
@@ -231,7 +210,7 @@ El operador entrega un JSON de configuración al iniciar un job.
   },
 
   "output": {
-    "formats": ["html", "json", "xlsx"],
+    "formats": ["html", "json"],
     "path": "./reports",
     "include_screenshots": true,
     "language": "es"
@@ -240,25 +219,19 @@ El operador entrega un JSON de configuración al iniciar un job.
   "agent": {
     "max_iterations": 30,
     "log_level": "info | debug | warn",
-    "model": "claude-sonnet-5"
+    "model": "claude-sonnet-4-5"
   }
 }
 ```
 
-> **Campo `skills`:** permite al operador activar o desactivar cada skill externo por job. Default: todos `true`.  
-> **Campo `wcag.baseline`:** `onti_2019` (default) → el agente evalúa y puntúa sobre los 38 criterios WCAG 2.0 A+AA de la ONTI.  
-> **Campo `wcag.conformance_threshold`:** mínimo de criterios ONTI conformes para declarar conformidad (default 30, según Disp. 6/2019).  
-> **Campo `wcag.extended_22`:** `false` (default) → los hallazgos de criterios fuera de los 38 se descartan. `true` → el agente evalúa además los criterios nuevos de WCAG 2.1/2.2 (`extended_22_tags`) y reporta un **score separado** de la capa extendida.
+> **Nuevo campo `skills`:** permite al operador activar o desactivar cada skill externo por job. Default: todos `true`.  
+> **Nuevo campo `wcag.onti_mapping`:** cuando es `true`, la matriz de criticidad incluye la columna ONTI 6/2019.
 
 ---
 
 ## 8. Entregables de F1 (Output Contract)
 
 Los 5 entregables formales que el agente debe producir al finalizar, según la propuesta.
-
-> **Formatos (decisión D3):** el agente emite **JSON + HTML** como fuente de verdad y, además, **XLSX** para el inventario de hallazgos, la matriz de criticidad y el roadmap de remediación — en **todos los jobs**, no como opción. El XLSX se genera en el paso de reporte a partir del mismo `classified_findings` (librería tipo `exceljs`); el skill `xlsx` del Plan de Construcción define el layout/plantilla de referencia. El JSON sigue siendo el contrato de datos; el XLSX es la vista de trabajo para analistas y backlog.
->
-> **Consolidación multi-canal (decisión D5):** cada job cubre **un canal** (`home_banking` | `app_ios` | `app_android`). Cuando se evalúan los tres, un paso posterior (`consolidate_jobs`) agrega los outputs en un **dashboard ejecutivo unificado** con score global multi-canal. Los entregables por-job se generan siempre; el consolidado es un entregable adicional cuando hay más de un canal en alcance.
 
 ### 8.1 Score de Cumplimiento Inicial
 
@@ -269,24 +242,23 @@ Los 5 entregables formales que el agente debe producir al finalizar, según la p
   "job_id": "string",
   "generated_at": "ISO8601",
   "channel": "string",
-  "baseline": "ONTI 6/2019 — WCAG 2.0 A+AA (38 criterios)",
-  "coverage_note": "Score sobre los 38 criterios ONTI por detección automática (~57% de barreras). Los criterios que requieren AT reales se evalúan en F2.",
+  "wcag_version": "2.2",
+  "coverage_note": "Score basado en detección automática (~57% de barreras WCAG). Los criterios que requieren AT reales se evalúan en F2.",
   "summary": {
     "total_urls_evaluated": 0,
-    "onti_criteria_evaluated": 38,
-    "onti_criteria_compliant": 0,
-    "onti_compliance_percentage": 0.0,
-    "onti_conformance": false,
-    "conformance_threshold": 30,
+    "total_criteria_evaluated": 0,
+    "criteria_compliant": 0,
+    "compliance_percentage": 0.0,
     "score_level_a": 0.0,
-    "score_level_aa": 0.0
+    "score_level_aa": 0.0,
+    "onti_criteria_compliant": 0,
+    "onti_compliance_percentage": 0.0
   },
-  "extended_22": null,
   "by_url": [
     {
       "url": "string",
       "module": "string",
-      "onti_compliance_percentage": 0.0,
+      "compliance_percentage": 0.0,
       "violations": 0,
       "incomplete": 0
     }
@@ -294,31 +266,23 @@ Los 5 entregables formales que el agente debe producir al finalizar, según la p
 }
 ```
 
-> `onti_conformance` es `true` cuando `onti_criteria_compliant >= conformance_threshold` (30). `score_level_a` y `score_level_aa` se calculan sobre los 25 criterios A y los 13 AA de la ONTI respectivamente.  
-> `extended_22` es `null` salvo que `wcag.extended_22=true`, en cuyo caso contiene `{ criteria_evaluated, criteria_compliant, compliance_percentage, by_criterion[] }` de la capa WCAG 2.1/2.2 — **sin mezclarse** con el score ONTI.
-
 ### 8.2 Dashboard Ejecutivo
 
-**Archivo:** `dashboard.html` (por job) · `dashboard-consolidado.html` (multi-canal, vía `consolidate_jobs`)
+**Archivo:** `dashboard.html`
 
 Página HTML standalone (sin dependencias externas) que incluye:
-- **Score ONTI (X/38 criterios conformes, %)** como indicador regulatorio primario, con gauge visual
-- **Estado de conformidad ONTI:** conforme / no conforme según el umbral ≥ 30/38
-- Score por nivel dentro de la ONTI (25 criterios A vs 13 AA) separados
+- Score global de compliance (%), con gauge visual
+- Score por nivel (A vs AA) separados
+- Score ONTI 38 criterios (destacado como indicador regulatorio primario)
 - Tabla de issues por severidad (Critical / Serious / Moderate / Minor)
-- Top 10 criterios ONTI más vulnerados
+- Top 10 criterios WCAG más vulnerados
 - Gráfico de distribución por módulo/URL
-- Sección **"Análisis complementario del Agente"** con los hallazgos visuales/UX (si los skills están activos), rotulada como que **no afecta el puntaje** — todos los demás bloques del dashboard se calculan solo con axe-core (D8)
-- **Bloque "Capa extendida WCAG 2.2"** solo si `wcag.extended_22=true`: score separado, claramente rotulado como no exigido por BCRA/ONTI
+- Sección de hallazgos visuales/UX (de skills externos, si activados)
 - Generado en español, con logo CFOTech
-
-**Versión consolidada (`dashboard-consolidado.html`):** cuando hay jobs de más de un canal, agrega Home Banking + App iOS + App Android en una sola vista — tabla resumen por canal, score global ponderado y desglose ONTI/WCAG por canal. Es la vista que alimenta la presentación ejecutiva al cliente.
 
 ### 8.3 Inventario de Hallazgos Consolidado
 
-**Archivos:** `inventario-hallazgos.json` + `inventario-hallazgos.xlsx`
-
-> El `.xlsx` incluye: Hoja 1 todos los hallazgos, Hoja 2 pivot por criterio WCAG, Hoja 3 solo hallazgos ONTI (38 criterios), Hoja 4 gráficos resumen. El `.json` es el contrato de datos.
+**Archivo:** `inventario-hallazgos.json`
 
 ```json
 {
@@ -332,7 +296,6 @@ Página HTML standalone (sin dependencias externas) que incluye:
       "wcag_level": "A",
       "wcag_description": "Texto alternativo",
       "onti_criterion": true,
-      "in_scope": "onti | extended_22",
       "severity": "critical | serious | moderate | minor",
       "rule_id": "string (axe rule id)",
       "affected_urls": ["string"],
@@ -341,46 +304,34 @@ Página HTML standalone (sin dependencias externas) que incluye:
       "failure_summary": "string",
       "remediation_hint": "string"
     }
-  ],
-  "complementary_findings": [
-    { "id": "uuid", "source": "visual_audit | ux_review", "wcag_criterion": "1.4.3", "severity": "serious", "failure_summary": "string", "remediation_hint": "string" }
   ]
 }
 ```
 
-> **Campo `source`:** en `findings` siempre es `axe-core` (v0.4, D8). Los hallazgos de `visual_audit` (rams) y `ux_review` (web-design-guidelines) van en `complementary_findings`, que solo aparece si hubo revisión del Agente y **no se cuenta** en `total_findings`, en las hojas del `.xlsx` ni en ningún otro entregable.  
-> **Campo `onti_criterion`:** booleano — el criterio pertenece a los 38 de ONTI 6/2019.  
-> **Campo `in_scope`:** `onti` (criterio de los 38, cuenta para el score) o `extended_22` (criterio nuevo 2.1/2.2, solo presente si `wcag.extended_22=true`, cuenta para el score separado). Los hallazgos que no caen en ninguno de los dos **no se incluyen** en el inventario.
+> **Nuevo campo `source`:** identifica si el hallazgo fue detectado por axe-core (automático), visual_audit (rams) o ux_review (web-design-guidelines).  
+> **Nuevo campo `onti_criterion`:** booleano que marca si el criterio pertenece a los 38 de ONTI 6/2019.
 
-### 8.4 Matriz de Criticidad
+### 8.4 Matriz de Criticidad WCAG 2.2
 
-**Archivos:** `matriz-criticidad.json` + `matriz-criticidad.html` + `matriz-criticidad.xlsx`
+**Archivo:** `matriz-criticidad.json` + `matriz-criticidad.html`
 
-**Decisión D1 (confirmada):** la "Matriz de Criticidad" que exige la propuesta se compone de **dos vistas** derivadas del mismo conjunto de hallazgos:
-
-**Vista principal — Matriz de conformidad (criterio × módulo).** Filas: los **38 criterios ONTI** (25 A + 13 AA). Columnas: módulos del canal. Estado por celda:
+Tabla criterio WCAG × módulo con estado:
 - `conforme` — ningún issue detectado
 - `no_conforme` — uno o más issues detectados
 - `parcialmente_conforme` — issues de tipo `incomplete` (requiere revisión manual)
 - `no_aplica` — criterio no aplicable al canal
 
-**Columna `nivel`:** A / AA dentro de la ONTI.  
-**Filas de la capa extendida:** si `wcag.extended_22=true`, se agregan al final las filas de los criterios nuevos 2.1/2.2, claramente separadas y rotuladas como "no exigido por BCRA/ONTI".
-
-**Vista secundaria — Grilla de criticidad (severidad × impacto).** Resumen tipo matriz de riesgo: eje severidad (crítico / alto / medio / bajo) × eje impacto (bloqueante / degradado / menor), con el conteo de hallazgos por cuadrante y drill-down al inventario. Se incluye también embebida en el Dashboard Ejecutivo (8.2).
-
-Ambas vistas van en los tres formatos (`.json` con las dos estructuras, `.html` con las dos tablas, `.xlsx` con una hoja por vista).
+**Nueva columna `onti`:** indica si el criterio pertenece al marco ONTI 6/2019 (los 38 criterios regulatorios nacionales).
 
 ### 8.5 Roadmap Preliminar de Remediación
 
-**Archivos:** `roadmap-remediacion.json` + `roadmap-remediacion.html` + `roadmap-remediacion.xlsx`
+**Archivo:** `roadmap-remediacion.json` + `roadmap-remediacion.html`
 
 Lista priorizada de acciones de corrección. Prioridad calculada por:
-- **Criterios ONTI primero** (obligación regulatoria); los de la capa extendida 2.2, si está activa, van después
-- Nivel WCAG (A antes que AA) — los 25 criterios A de la ONTI son bloqueantes
+- Pertenencia al marco ONTI (criterios ONTI primero — son la obligación regulatoria directa del BCRA)
 - Severidad del issue (Critical > Serious > Moderate > Minor)
 - Frecuencia de aparición (cuántos módulos afecta)
-- Cercanía al umbral: los criterios cuya corrección hace pasar la conformidad de < 30 a ≥ 30/38 se marcan como "quick win regulatorio"
+- Nivel WCAG (A antes que AA)
 - Estimación de esfuerzo (Low / Medium / High — generada por el skill `improve-ui`)
 
 > **Mejora v0.2:** el skill `ibelick/improve-ui` genera planes de implementación autocontenidos por hallazgo (no solo descripciones), listos para que el equipo de desarrollo de la Entidad los ejecute directamente.
@@ -414,10 +365,8 @@ START
 [3] PLAN
     Calcular batches según parallel_workers
     Estimar tiempo (urls × avg_scan_time)
-    Definir tags de scan: base_tags (wcag2a, wcag2aa) siempre
-      + extended_22_tags si wcag.extended_22=true
     Determinar qué skills externos activar según config
-    Log: "{N} URLs. Base: WCAG 2.0 A+AA (38 ONTI). Capa 2.2: {on|off}. Skills: {lista}."
+    Log: "{N} URLs a escanear. Skills activos: {lista}. Estimado: {T} minutos."
 
   │
   ▼
@@ -443,15 +392,8 @@ START
   │
   ▼
 [5] ANALYZE
-    → classify_findings(axe_results)
-       - mapea cada hallazgo a criterio WCAG y setea in_scope: "onti" | "extended_22"
-       - descarta los hallazgos que no son ONTI si wcag.extended_22=false (decisión D7)
-    → visual_findings + ux_findings se conservan como ANÁLISIS COMPLEMENTARIO (D8):
-       - no entran en calculate_score ni en el cálculo de ningún entregable
-       - se muestran aparte en el dashboard, el informe narrativo y el inventario JSON
-    → calculate_score(classified_findings)   ← solo hallazgos de axe-core
-       - onti_compliance_percentage + onti_conformance (>= 30/38)
-       - extended_22 score separado si la capa está activa
+    → classify_findings(axe_results + visual_findings + ux_findings)
+    → calculate_score(classified_findings)
     EVALUAR: ¿cobertura mínima alcanzada? (>= 80% de URLs escaneadas)
     Si < 80%: log advertencia, continuar de todas formas con nota en reporte
 
@@ -460,11 +402,11 @@ START
 [6] GENERATE DELIVERABLES (en orden)
     → generate_deliverable("score", data)          → score-compliance.json
     → generate_deliverable("dashboard", data)       → dashboard.html
-    → generate_deliverable("inventario", data)      → inventario-hallazgos.{json,xlsx}
-    → generate_deliverable("matriz", data)          → matriz-criticidad.{json,html,xlsx}
+    → generate_deliverable("inventario", data)      → inventario-hallazgos.json
+    → generate_deliverable("matriz", data)          → matriz-criticidad.{json,html}
     Si generate_remediation_plan=true:
       → generate_remediation_plan(findings)         → planes autocontenidos por hallazgo
-    → generate_deliverable("roadmap", data)         → roadmap-remediacion.{json,html,xlsx}
+    → generate_deliverable("roadmap", data)         → roadmap-remediacion.{json,html}
     EVALUAR: verificar que cada archivo existe y tiene contenido válido
 
   │
@@ -474,18 +416,6 @@ START
     Log: resumen ejecutivo de lo realizado
     Exponer resultados vía GET /jobs/:id/reports
     DEVOLVER CONTROL AL OPERADOR
-```
-
-**[8] CONSOLIDATE (paso separado, cuando hay > 1 canal en alcance)**
-
-```
-Trigger: POST /api/jobs/consolidate  { job_ids: [hb_job, ios_job, android_job] }
-  → consolidate_jobs(job_ids)
-     - valida que todos los jobs estén COMPLETED
-     - agrega score por canal + score global ponderado
-     - agrega inventario y matriz cruzando los 3 canales
-  → genera dashboard-consolidado.html + score-consolidado.json
-  EVALUAR: verificar que los 3 canales estén representados
 ```
 
 ---
@@ -500,7 +430,6 @@ Trigger: POST /api/jobs/consolidate  { job_ids: [hb_job, ios_job, android_job] }
 | `GET` | `/api/jobs/:id` | Estado actual del job y métricas en tiempo real |
 | `GET` | `/api/jobs/:id/reports` | Lista de entregables generados con URLs de descarga |
 | `GET` | `/api/jobs/:id/reports/:file` | Descarga un entregable específico |
-| `POST` | `/api/jobs/consolidate` | Consolida varios jobs (uno por canal) en un dashboard ejecutivo unificado. Body: `{ "job_ids": ["...", "..."] }` |
 | `DELETE` | `/api/jobs/:id` | Cancela un job en curso |
 | `GET` | `/api/health` | Health check del servicio |
 
@@ -560,7 +489,7 @@ SKILLS_REMEDIATION_PLAN=true
 | Componente | Tecnología | Justificación |
 |---|---|---|
 | Runtime | Node.js 20+ | Ecosistema natural de axe-core y Playwright |
-| Cerebro del agente | Anthropic SDK + Claude claude-sonnet-5 | Loop autónomo con tool-use real (decisión D2). `claude-opus-5` queda como alternativa documentada si en pruebas el loop no rinde. |
+| Cerebro del agente | Anthropic SDK + Claude claude-sonnet-4-5 | Loop autónomo con tool-use real |
 | Motor de escaneo | axe-core + @axe-core/playwright | Herramienta mencionada en la propuesta, mayor cobertura WCAG |
 | Browser headless | Playwright | Mejor soporte de SPAs bancarias que Puppeteer |
 | Crawling | crawlee (Playwright mode) | Crawler de producción con deduplicación y rate limiting |
@@ -650,21 +579,17 @@ El agente F1 se considera funcional cuando:
 - [ ] Acepta configuración en modo `url_list` y en modo `crawl`.
 - [ ] Ejecuta el loop autónomo sin intervención para un job estándar de 8 URLs.
 - [ ] Genera los 5 entregables de F1 en formato válido.
-- [ ] El `score-compliance.json` contiene `onti_compliance_percentage` y `onti_conformance` (≥ 30/38) correctamente calculados sobre los 38 criterios ONTI.
-- [ ] Con `wcag.extended_22=true`, el `score-compliance.json` incluye el objeto `extended_22` con score separado; con `false`, los hallazgos fuera de los 38 no aparecen.
-- [ ] El `dashboard.html` es standalone (sin red), abre en browser y muestra el score ONTI y su estado de conformidad.
-- [ ] La `matriz-criticidad` cubre los 38 criterios ONTI (25 A + 13 AA) en las dos vistas (conformidad y severidad × impacto); si `extended_22=true`, agrega las filas 2.1/2.2 separadas.
+- [ ] El `score-compliance.json` contiene `compliance_percentage` y `onti_compliance_percentage` correctamente calculados.
+- [ ] El `dashboard.html` es standalone (sin red), abre en browser y muestra score y hallazgos.
+- [ ] La `matriz-criticidad` cubre los 50 criterios WCAG 2.2 A+AA con columna ONTI marcada.
 - [ ] El `roadmap-remediacion` lista hallazgos ordenados por prioridad (ONTI primero, luego severidad).
-- [ ] `inventario-hallazgos`, `matriz-criticidad` y `roadmap-remediacion` se generan también en `.xlsx` en todos los jobs, abren en Excel y muestran los datos.
-- [ ] Con jobs de más de un canal, `POST /api/jobs/consolidate` produce `dashboard-consolidado.html` con los 3 canales y un score global.
 - [ ] El job se completa o detiene con criterio de parada claro en ≤ 30 iteraciones.
 - [ ] Los logs muestran el estado del loop en cada iteración (transparencia).
 - [ ] El agente solicita clarificación en lugar de fallar si encuentra un bloqueo.
 
 **Skills externos:**
-- [ ] Si `visual_audit=true`, sus hallazgos aparecen en `complementary_findings` del inventario JSON y en la sección "Análisis complementario del Agente" del dashboard y del informe narrativo.
-- [ ] Si `ux_compliance_review=true`, ídem con `source: "ux_review"`.
-- [ ] El score, el estado de los 38 criterios, la matriz y el roadmap son **idénticos** con o sin revisión del Agente (D8) — cubierto por test automático en `calculate-score.test.js` y `generate-deliverable.test.js`.
+- [ ] Si `visual_audit=true`, el inventario incluye hallazgos con `source: "visual_audit"`.
+- [ ] Si `ux_compliance_review=true`, el inventario incluye hallazgos con `source: "ux_review"`.
 - [ ] Si `generate_remediation_plan=true`, el roadmap incluye planes de implementación autocontenidos por hallazgo.
 - [ ] Si la API falla durante ENRICH, el agente continúa sin los skills y lo documenta.
 
@@ -685,25 +610,11 @@ Antes de iniciar la construcción, se requiere definición de los siguientes pun
 5. **Multi-tenancy:** ¿El SaaS debe soportar múltiples entidades financieras cliente o es mono-tenant para esta propuesta?
 6. **Notificaciones:** ¿El operador necesita recibir notificación (email/webhook) cuando un job finaliza?
 
-**Decisiones resueltas en la alineación con la propuesta (v0.3):**
-
-| ID | Decisión | Resolución |
-|---|---|---|
-| D1 | Composición del entregable "Matriz de Criticidad" (ver 8.4) | **Ambas vistas:** matriz de conformidad criterio × módulo **+** grilla severidad × impacto |
-| D2 | Modelo del cerebro del agente | **`claude-sonnet-5`.** `claude-opus-5` queda documentado como alternativa si en pruebas el loop no rinde |
-| D3 | Formato de los entregables | **JSON + HTML + XLSX** en todos los jobs (XLSX para inventario, matriz y roadmap). JSON = contrato de datos |
-| D4 | Marco de referencia en los reportes al cliente | **Superada por D6.** El reporte se basa en los 38 criterios ONTI (WCAG 2.0 A+AA), umbral 30 |
-| D5 | Vista ejecutiva de los 3 canales (1 canal = 1 job) | **Job por canal + paso `consolidate_jobs`** que agrega HB / iOS / Android en `dashboard-consolidado.html` con score global |
-| D6 | Estándar WCAG base de F1 | **WCAG 2.0 A+AA — 38 criterios ONTI Disp. 6/2019 (25 A + 13 AA), umbral ≥ 30/38** (láminas 9 y 10 de la propuesta). WCAG 2.2 AA = capa extendida opcional (`wcag.extended_22`) con score separado |
-| D7 | Hallazgos de criterios fuera de los 38 (2.1/2.2) | Se **descartan** por defecto. Solo entran al inventario y a un score separado si `wcag.extended_22=true` |
-
 ---
 
-## 18. Mapeo Normativo: ONTI 38 Criterios (base) + Capa Extendida WCAG 2.2 (opcional)
+## 18. Mapeo Normativo Completo: ONTI 38 Criterios + WCAG 2.2
 
-El **scope base y obligatorio de F1** es 18.1 (los 38 criterios ONTI). La sección 18.2 es la **capa extendida opcional** que solo se evalúa con `wcag.extended_22=true`.
-
-### 18.1 ONTI Disposición 6/2019 — Los 38 Criterios de Conformidad (BASE DE F1)
+### 18.1 ONTI Disposición 6/2019 — Los 38 Criterios de Conformidad
 
 La ONTI adopta **WCAG 2.0** (no 2.1 ni 2.2). Selecciona exactamente **38 criterios**:
 - **25 criterios de Nivel A**
@@ -757,39 +668,32 @@ La ONTI adopta **WCAG 2.0** (no 2.1 ni 2.2). Selecciona exactamente **38 criteri
 
 ---
 
-### 18.2 Capa Extendida WCAG 2.2 — Opcional (no exigida por BCRA ni ONTI)
+### 18.2 WCAG 2.2 — Niveles A, AA y AAA (referencia completa del agente)
 
-Se evalúa **solo si `wcag.extended_22=true`**, con score separado del compliance ONTI. Son los criterios que WCAG 2.1 y 2.2 agregan por encima de los 38 de la ONTI (WCAG 2.0 A+AA). **18 criterios**, varios muy relevantes para banca:
+El agente evalúa **WCAG 2.2 Niveles A + AA** (50 criterios) como estándar de referencia.  
+El Nivel AAA se documenta solo como referencia aspiracional (no es exigido por BCRA ni ONTI).
 
-#### Suma WCAG 2.1 (12 criterios)
+#### Nivel A (30 criterios en WCAG 2.2)
 
-| Criterio | Nivel | Relevancia banca |
-|---|---|---|
-| 2.1.4 Atajos de teclado con caracteres | A | Home banking con shortcuts |
-| 2.5.1 Gestos de puntero | A | App: pinch/swipe con alternativa |
-| 2.5.2 Cancelación del puntero | A | Evitar acciones al soltar |
-| 2.5.3 Etiqueta en el nombre accesible | A | Botones "Transferir", "Pagar" |
-| 2.5.4 Actuación por movimiento | A | Sacudir para deshacer |
-| 1.3.4 Orientación | AA | No forzar portrait/landscape |
-| 1.3.5 Identificar el propósito de la entrada | AA | Autocompletar CBU/CVU, DNI |
-| 1.4.10 Reajuste (reflow) | AA | Zoom 400% sin scroll horizontal |
-| 1.4.11 Contraste de elementos no textuales | AA | Bordes de inputs, íconos de estado |
-| 1.4.12 Espaciado del texto | AA | Sin recortes al aumentar interlineado |
-| 1.4.13 Contenido en hover/focus | AA | Tooltips de ayuda descartables |
-| 4.1.3 Mensajes de estado | AA | "Transferencia enviada" anunciado por lector |
+Incluye todos los de WCAG 2.0 A + nuevos de 2.1/2.2:
+- 1.1.1, 1.2.1, 1.2.2, 1.2.3, 1.3.1, 1.3.2, 1.3.3, 1.4.1, 1.4.2
+- 2.1.1, 2.1.2, 2.1.4, 2.2.1, 2.2.2, 2.3.1, 2.4.1, 2.4.2, 2.4.3, 2.4.4
+- 2.5.1, 2.5.2, 2.5.3, 2.5.4
+- 3.1.1, 3.2.1, 3.2.2, 3.2.6 *(nuevo 2.2)*, 3.3.1, 3.3.2, 3.3.7 *(nuevo 2.2)*
+- 4.1.2
 
-#### Suma WCAG 2.2 (6 criterios)
+#### Nivel AA (20 criterios adicionales → total 50)
 
-| Criterio | Nivel | Relevancia banca |
-|---|---|---|
-| 3.2.6 Ayuda coherente | A | "Contactar" siempre en el mismo lugar |
-| 3.3.7 Entrada redundante | A | No re-pedir datos ya ingresados en el flujo |
-| 2.4.11 Foco no oscurecido (mínimo) | AA | Sticky headers que tapan el foco |
-| 2.5.7 Movimientos de arrastre | AA | Sliders de monto con alternativa |
-| 2.5.8 Tamaño del objetivo (mínimo 24×24) | AA | Botones y teclado numérico táctil |
-| 3.3.8 Autenticación accesible | AA | **Login / MFA sin prueba cognitiva** (captcha, recordar) |
+- 1.2.4, 1.2.5, 1.3.4, 1.3.5, 1.4.3, 1.4.4, 1.4.5, 1.4.10, 1.4.11, 1.4.12, 1.4.13
+- 2.4.5, 2.4.6, 2.4.7, 2.4.11 *(nuevo 2.2)*, 2.5.7 *(nuevo 2.2)*, 2.5.8 *(nuevo 2.2)*
+- 3.1.2, 3.2.3, 3.2.4, 3.3.3, 3.3.4, 3.3.8 *(nuevo 2.2)*
+- 4.1.3
 
-> WCAG 2.2 elimina 4.1.1 (Parsing); ese criterio **sí** sigue vigente en ONTI (18.1, #24) y el agente lo evalúa siempre como parte de los 38. El Nivel AAA de WCAG no se evalúa en ninguna capa.
+#### Nivel AAA (referencia — no evaluado por el agente F1)
+
+Incluye entre otros: 1.2.6, 1.2.7, 1.2.8, 1.2.9, 1.3.6, 1.4.6, 1.4.7, 1.4.8, 1.4.9,  
+2.1.3, 2.2.3, 2.2.4, 2.2.5, 2.2.6, 2.3.2, 2.3.3, 2.4.8, 2.4.9, 2.4.10, 2.4.12, 2.4.13,  
+2.5.5, 2.5.6, 3.1.3, 3.1.4, 3.1.5, 3.1.6, 3.2.5, 3.3.5, 3.3.6, 3.3.9, etc.
 
 ---
 
@@ -798,15 +702,15 @@ Se evalúa **solo si `wcag.extended_22=true`**, con score separado del complianc
 | Método | Cobertura aproximada | Criterios cubiertos principalmente |
 |--------|----------------------|------------------------------------|
 | **axe-core (automático)** | ~55–57% de los hallazgos por volumen | Contraste, alt vacío, ARIA inválida, labels, lang, títulos, skip links, target-size, focus visible parcial |
-| **Skills externos (visual_audit + ux_review)** | Análisis complementario (D8): aporta señales ~5–8% adicionales, **no suma al score** | Contraste límite, touch targets, coherencia de navegación, patrones de formularios, mensajes de error |
+| **Skills externos (visual_audit + ux_review)** | Eleva cobertura ~5–8% adicional | Contraste límite, touch targets, coherencia de navegación, patrones de formularios, mensajes de error |
 | **Parcial / incomplete** | — | El agente marca como `parcialmente_conforme` y eleva a revisión manual o F2 |
 | **Revisión manual / AT reales (F2)** | Resto ~35–40% | Calidad de textos alternativos, flujos de teclado completos, subtítulos, audiodescripción, prevención de errores financieros, etc. |
 
 **Política del agente:**
 
-El agente genera el score automático sobre los **38 criterios ONTI (WCAG 2.0 A+AA)** **solo con axe-core** (D8); los skills externos se reportan como análisis complementario. Marca explícitamente en todos los reportes:
+El agente genera el score automático basado en axe-core + skills externos (WCAG 2.2 A+AA), y marca explícitamente en todos los reportes:
 
-> *"Este score corresponde a la detección automática sobre los 38 criterios de la ONTI Disp. 6/2019 (~57% de las barreras, detectadas por axe-core; la revisión del Agente con IA se informa como análisis complementario y no incide en el score). Los criterios que requieren evaluación con tecnologías de asistencia o juicio humano se tratan en Fase 2. La capa WCAG 2.2, si se auditó, se reporta por separado y no incide en el compliance ONTI."*
+> *"Este score corresponde a la detección automática (~57–65% de barreras con skills activos). Los criterios que requieren evaluación con tecnologías de asistencia o juicio humano se tratan en Fase 2."*
 
 En la matriz de criticidad distingue: `conforme` | `no_conforme` | `parcialmente_conforme` (incomplete) | `no_aplica`.
 
@@ -814,10 +718,10 @@ En la matriz de criticidad distingue: `conforme` | `no_conforme` | `parcialmente
 
 ### 18.4 Impacto en los Entregables de F1
 
-- El **Score de Cumplimiento** se calcula sobre los **38 criterios ONTI (WCAG 2.0 A+AA)**, con el estado de conformidad según el umbral 30/38. Si `wcag.extended_22=true`, se agrega un objeto `extended_22` con score separado de los 18 criterios de la capa.
-- La **Matriz de Criticidad** cruza los 38 criterios ONTI × módulo (columna `nivel` A/AA). Con la capa extendida activa, suma las filas 2.1/2.2 al final, rotuladas como no exigidas.
-- El **Roadmap de Remediación** prioriza los 25 criterios A de la ONTI (bloqueantes), luego los 13 AA, luego severidad y frecuencia; marca los "quick wins" que cruzan el umbral 30/38. Los ítems de la capa extendida van al final.
-- El **Dashboard Ejecutivo** muestra el score ONTI y su estado de conformidad como KPI regulatorio primario. La capa WCAG 2.2, si se auditó, aparece en un bloque separado y secundario.
+- El **Score de Cumplimiento** se calcula sobre los 50 criterios WCAG 2.2 A+AA e incluye un sub-score específico para los 38 criterios ONTI.
+- La **Matriz de Criticidad** incluye una columna "ONTI 6/2019" que indica si el criterio pertenece a los 38 criterios oficiales.
+- El **Roadmap de Remediación** prioriza primero los criterios ONTI (por ser el marco regulatorio nacional al que remite el BCRA), luego por severidad y frecuencia.
+- El **Dashboard Ejecutivo** muestra el score ONTI como KPI regulatorio primario, y el score WCAG 2.2 AA como referencia técnica extendida.
 
 ---
 
@@ -858,7 +762,7 @@ skill-name/
 
 **Qué aporta:** audita la superficie existente del producto, identifica problemas verificados y genera planes de implementación autocontenidos listos para ser ejecutados por otro agente o por el equipo de desarrollo. No modifica el código fuente — solo planifica.
 
-**Cuándo se invoca:** en la fase GENERATE, sobre los hallazgos de axe-core, para producir los planes de fix del Entregable 5 (Roadmap). Los hallazgos de visual_audit / ux_review no modifican el orden ni el contenido del roadmap (D8).
+**Cuándo se invoca:** en la fase GENERATE, después de consolidar todos los hallazgos (axe-core + visual_audit + ux_review), para producir los planes de fix del Entregable 5 (Roadmap).
 
 **Output:** `remediation_plans[]` — un plan por hallazgo, con: descripción del problema, criterio WCAG afectado, código de ejemplo correcto, estimación de esfuerzo y dependencias.
 
@@ -875,9 +779,9 @@ f1-compliance-agent/
 │   ├── classifier.js         # clasificación de hallazgos
 │   └── reporter.js           # generación de entregables
 ├── references/
-│   ├── onti-38-criteria.json      # los 38 criterios ONTI 6/2019 — BASE de F1
-│   ├── wcag-22-extended.json      # los 18 criterios 2.1/2.2 de la capa opcional
-│   └── bcra-7517-summary.md       # resumen de obligaciones BCRA
+│   ├── wcag-22-criteria.json # los 50 criterios WCAG 2.2 A+AA
+│   ├── onti-38-criteria.json # los 38 criterios ONTI 6/2019
+│   └── bcra-7517-summary.md  # resumen de obligaciones BCRA
 └── assets/
     ├── dashboard-template.html
     ├── matriz-template.html
@@ -888,7 +792,5 @@ f1-compliance-agent/
 
 ---
 
-*Documento preparado por CFOTech IT Global Services · Equipo de Delivery · Septiembre 2026*  
-*v0.1 → v0.2: incorporación de skills externos (ui-skills.com / agentskills.io) y mapeo normativo completo ONTI + WCAG 2.2*  
-*v0.3 → v0.4: el score y los entregables se basan solo en axe-core; la revisión del Agente con IA (visual/UX) pasa a ser análisis complementario que no afecta el puntaje (D8)*  
-*v0.2 → v0.3: alineación con Propuesta_Accesibilidad_EntidadFinanciera_v7.pptx (láminas 9-10 como base) — marco base WCAG 2.0 / 38 criterios ONTI, umbral 30/38 (D6); WCAG 2.2 AA como capa extendida opcional con score separado (D6/D7); modelo `claude-sonnet-5` (D2); matriz de criticidad de dos vistas (D1); entregables JSON+HTML+XLSX en todos los jobs (D3); consolidación multi-canal `consolidate_jobs` (D5); alcance WebView de App Mobile*
+*Documento preparado por CFOTech IT Global Services · Equipo de Delivery · Agosto 2026*  
+*v0.1 → v0.2: incorporación de skills externos (ui-skills.com / agentskills.io) y mapeo normativo completo ONTI + WCAG 2.2*

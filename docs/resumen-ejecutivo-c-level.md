@@ -14,7 +14,7 @@ Un agente de inteligencia artificial autónomo que audita accesibilidad digital 
 
 1. **Descubre** — recorre el sitio o la app y arma el mapa completo de pantallas a revisar.
 2. **Escanea** — audita cada pantalla contra los 38 criterios que exige la normativa argentina (ONTI/BCRA), usando el mismo estándar internacional (WCAG) que usan las auditorías profesionales.
-3. **Revisa con criterio humano, vía IA** — más allá del escaneo automático, el agente ahora también "mira" cada pantalla con inteligencia artificial con visión, para detectar lo que un chequeo técnico no puede ver por sí solo: contraste que es técnicamente válido pero difícil de leer, botones incómodos de tocar, mensajes de error confusos.
+3. **Suma una mirada experta, vía IA (análisis complementario)** — además del escaneo automático, el agente "mira" cada pantalla con inteligencia artificial con visión, para señalar lo que un chequeo técnico no puede ver por sí solo: contraste que es técnicamente válido pero difícil de leer, botones incómodos de tocar, mensajes de error confusos. Estos hallazgos se informan aparte y **no modifican el score de cumplimiento**, que se calcula solo con el escaneo automático normativo.
 4. **Reporta** — genera automáticamente los 5 documentos que necesita el negocio: score de cumplimiento, dashboard ejecutivo, inventario de hallazgos, matriz de criticidad y un roadmap de remediación priorizado.
 
 ## Qué entrega, concretamente
@@ -29,8 +29,8 @@ Un agente de inteligencia artificial autónomo que audita accesibilidad digital 
 
 ## Avance de esta etapa
 
-- El agente ya cubre automáticamente entre el 57% y el 65% de las barreras de accesibilidad sin intervención humana — el resto requiere evaluación con tecnología asistiva real (lectores de pantalla), prevista para una fase posterior.
-- Se sumó la capa de revisión con IA con visión, que antes era solo una promesa en el documento de propuesta y hoy es funcionalidad real y probada.
+- El score de cumplimiento se basa en la detección automática, que cubre **alrededor del 57%** de las barreras de accesibilidad sin intervención humana. El resto (~43%) requiere evaluación con tecnología asistiva real (lectores de pantalla), prevista para la Fase 2.
+- Se sumó la capa de revisión con IA con visión, que antes era solo una promesa en el documento de propuesta y hoy es funcionalidad real y probada. Aporta señales adicionales (estimadas en un 5–8% más de barreras) como **análisis complementario**: orienta la revisión del especialista, pero no cambia el score regulatorio, para no alterar un indicador de cumplimiento con resultados que todavía no fueron validados por una persona.
 - El sistema quedó validado técnicamente (174 pruebas automáticas verdes) y todo el desarrollo está resguardado en un repositorio corporativo.
 
 ## Estado y próximos pasos
@@ -45,7 +45,7 @@ MVP de Fase 1 funcionalmente completo. Quedan pendientes, sin bloquear el uso:
 
 ## Notas para seguir refinando
 
-- [ ] Confirmar cifras de cobertura (57–65%) contra la propuesta original antes de mostrarlo a cliente.
+- [ ] Confirmar la cifra de cobertura del score (~57%, fuente GDS UK) y el aporte complementario de la IA (5–8%, estimado en la SPEC §18.3) contra la propuesta original antes de mostrarlo a cliente.
 - [ ] Decidir si se muestra el detalle técnico de "cómo funciona" o se deja más alto nivel para C-level.
 - [ ] Agregar slide de comparación costo/tiempo vs. auditoría manual tradicional (falta el dato de referencia).
 - [ ] Decidir si se menciona el hallazgo y arreglo del bug de seguridad como caso de "control de calidad riguroso" o se omite por ser detalle interno.

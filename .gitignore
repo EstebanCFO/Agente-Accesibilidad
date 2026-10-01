@@ -3,3 +3,6 @@ node_modules/
 reports/
 *.log
 .playwright-mcp/
+
+# Capturas y ejemplos generados en sesiones con Claude (no forman parte del código)
+Claude outputs/
