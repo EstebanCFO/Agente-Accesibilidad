@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 const VALID_CHANNELS = ['home_banking', 'app_ios', 'app_android'];
 const VALID_MODES = ['url_list', 'crawl'];
+const VPAT_FIELDS = ['product_name', 'product_version', 'description', 'contact'];
 
 function buildDefaults() {
   return {
@@ -86,6 +87,21 @@ export function validateConfig(rawConfig) {
     }
   }
 
+  // Datos del producto para el VPAT (spec 2026-10-01): opcionales; lo que falte se completa con
+  // valores por defecto al generar el informe. Lo mal formado se ignora con aviso, nunca frena.
+  const vpat = {};
+  if (raw.vpat !== undefined) {
+    if (raw.vpat && typeof raw.vpat === 'object' && !Array.isArray(raw.vpat)) {
+      for (const key of VPAT_FIELDS) {
+        if (!(key in raw.vpat)) continue;
+        if (typeof raw.vpat[key] === 'string') vpat[key] = raw.vpat[key];
+        else warnings.push(`vpat.${key} se ignora: tiene que ser texto`);
+      }
+    } else {
+      warnings.push('vpat se ignora: tiene que ser un objeto con product_name, product_version, description y contact');
+    }
+  }
+
   const defaults = buildDefaults();
   const config = {
     job_id: raw.job_id || randomUUID(),
@@ -96,7 +112,8 @@ export function validateConfig(rawConfig) {
     scope: deepMerge(defaults.scope, raw.scope),
     skills: deepMerge(defaults.skills, rawSkills),
     output: deepMerge(defaults.output, raw.output),
-    agent: deepMerge(defaults.agent, raw.agent)
+    agent: deepMerge(defaults.agent, raw.agent),
+    vpat
   };
 
   return { valid: true, errors: [], warnings, config };
