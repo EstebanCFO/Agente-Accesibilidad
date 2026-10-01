@@ -153,3 +153,24 @@ test('buildConfigFields incluye la evaluación WCAG 2.0 A/AA siempre activa y bl
   assert.match(base.label, /WCAG 2\.0 \(niveles A, AA\)/);
   assert.deepEqual(validateDemoConfig({ wcagBase: false }).config.wcagTags.slice(0, 2), ['wcag2a', 'wcag2aa']);
 });
+
+test('buildConfigFields incluye los datos opcionales del VPAT como texto', () => {
+  const fields = Object.fromEntries(buildConfigFields().map((f) => [f.name, f]));
+  for (const name of ['vpatProductName', 'vpatProductVersion', 'vpatDescription', 'vpatContact']) {
+    assert.equal(fields[name]?.type, 'text', name);
+    assert.match(fields[name].placeholder, /^Opcional/);
+  }
+});
+
+test('validateDemoConfig lleva a config.vpat solo los datos del VPAT cargados', () => {
+  const { config } = validateDemoConfig({ vpatProductName: '  Banco X ', vpatProductVersion: '', vpatContact: 'a11y@x.test' });
+  assert.deepEqual(config.vpat, { product_name: 'Banco X', contact: 'a11y@x.test' });
+  assert.deepEqual(validateDemoConfig(defaultConfigValues()).config.vpat, {});
+});
+
+test('buildConfigSummary muestra los datos del VPAT solo si se cargaron', () => {
+  const sin = buildConfigSummary(validateDemoConfig(defaultConfigValues()).config);
+  assert.ok(!sin.some((r) => r.label === 'Datos para el VPAT'));
+  const con = buildConfigSummary(validateDemoConfig({ vpatProductName: 'Banco X', vpatProductVersion: '3.2' }).config);
+  assert.equal(con.find((r) => r.label === 'Datos para el VPAT').value, 'Banco X · 3.2');
+});

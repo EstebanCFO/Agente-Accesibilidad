@@ -65,12 +65,14 @@ async function highlightOnPage(page, violations) {
 
 // El informe se acota a tres entregables: Score de cumplimiento inicial (vista del dashboard +
 // score-compliance.json), Inventario de hallazgos y Matriz de criticidad; el PDF los consolida.
+// Además se genera el VPAT 2.5 (edición WCAG) en su propio PDF, para entregar al cliente.
 const DELIVERABLES = [
   { type: 'score', label: 'Score de cumplimiento (datos)' },
   { type: 'dashboard', key: 'dashboard', label: 'Score de cumplimiento inicial', open: 'dashboard.html' },
   { type: 'inventario', key: 'inventario', label: 'Inventario de hallazgos', open: 'inventario-hallazgos.html' },
   { type: 'matriz', key: 'matriz', label: 'Matriz de criticidad WCAG 2.0 AA', open: 'matriz-criticidad.html' },
-  { type: 'informe-pdf', key: 'pdf', label: 'Informe PDF consolidado', open: 'informe-consolidado.pdf' }
+  { type: 'informe-pdf', key: 'pdf', label: 'Informe PDF consolidado', open: 'informe-consolidado.pdf' },
+  { type: 'vpat', key: 'vpat', label: 'VPAT 2.5 (WCAG)', open: 'vpat-wcag.pdf' }
 ];
 
 /** Mensaje corto y legible para la audiencia (sin JSON crudo de la API ni stack traces). */
@@ -432,7 +434,8 @@ async function runDemo(ui, { stage }) {
   ui.pushResult(buildBestPracticesCard(finalScores.best_practices));
   const data = {
     jobId, channel: config.channel, scores: finalScores, findings, keyboardResults, axeResults,
-    urls: axeResults.map((r) => r.url), includeExtended: config.includeExtended
+    urls: axeResults.map((r) => r.url), includeExtended: config.includeExtended,
+    vpat: config.vpat, target: config.target
   };
   const generated = [];
   for (const [i, deliverable] of DELIVERABLES.entries()) {
