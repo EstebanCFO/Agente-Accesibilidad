@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildVpatRows, resolveVpatInfo, CONFORMANCE } from './vpat-deliverable.js';
+import { buildVpatRows, resolveVpatInfo, buildVpatReportHtml, CONFORMANCE } from './vpat-deliverable.js';
 import { computeWcagSection } from '../classification/wcag-section.js';
 
 const page = (url, passes = []) => ({ url, violations: [], incomplete: [], inapplicable: [], passes });
@@ -154,4 +154,53 @@ test('resolveVpatInfo con carpeta local o file: usa el nombre de la carpeta/arch
   assert.equal(resolveVpatInfo(null, { target: 'C:\\sitios\\banco-demo\\', channel: 'home_banking', date: FECHA }).productName, 'banco-demo');
   assert.equal(resolveVpatInfo(null, { target: 'file:///C:/sitios/mi%20banco/index.html', channel: 'home_banking', date: FECHA }).productName, 'index.html');
   assert.equal(resolveVpatInfo(null, { target: '', channel: 'home_banking', date: FECHA }).productName, 'Sitio auditado');
+});
+
+function reportData(extra = {}) {
+  const axeResults = pages(2, [{ id: 'html-has-lang', tags: ['wcag2a', 'wcag311'] }]);
+  return {
+    jobId: 'job-vpat', channel: 'home_banking', axeResults, urls: axeResults.map((p) => p.url),
+    findings: [finding('1.1.1', [axeResults[0].url], { rule_id: 'image-alt' })],
+    target: 'https://a.test', keyboardResults: [{ url: axeResults[0].url }], ...extra
+  };
+}
+
+test('buildVpatReportHtml arma encabezado, datos del producto, estándares, términos y las tres tablas', () => {
+  const html = buildVpatReportHtml(reportData(), { date: FECHA });
+  for (const t of [
+    'Informe de Conformidad de Accesibilidad', 'VPAT® 2.5', 'Datos del producto', 'Métodos de evaluación utilizados',
+    'Estándares aplicables', 'Términos', 'Tabla 1: Criterios de conformidad, Nivel A',
+    'Tabla 2: Criterios de conformidad, Nivel AA', 'Tabla 3: Criterios de conformidad, Nivel AAA',
+    'Not Evaluated (to validate)', 'Partially Supports', 'a.test'
+  ]) assert.ok(html.includes(t), t);
+  assert.match(html, /2 páginas evaluadas/);
+  assert.match(html, /pruebas de teclado del Agente/);
+  assert.doesNotMatch(html, /<script/);
+});
+
+test('buildVpatReportHtml: estándares aplicables según el check de 2.2', () => {
+  const sin = buildVpatReportHtml(reportData(), { date: FECHA });
+  const con = buildVpatReportHtml(reportData({ includeExtended: true }), { date: FECHA });
+  assert.match(sin, /WCAG 2\.1<\/td><td>No<\/td>/);
+  assert.match(sin, /WCAG 2\.2<\/td><td>No<\/td>/);
+  assert.match(con, /WCAG 2\.1<\/td><td>Sí/);
+  assert.match(con, /WCAG 2\.2<\/td><td>Sí/);
+  assert.ok(con.includes('2.5.8'));
+  assert.ok(!sin.includes('2.5.8'));
+});
+
+test('buildVpatReportHtml escapa los datos cargados por el usuario', () => {
+  const html = buildVpatReportHtml(reportData({ vpat: { product_name: '<script>alert(1)</script> & "Co"' } }), { date: FECHA });
+  assert.ok(html.includes('&lt;script&gt;alert(1)&lt;/script&gt; &amp; &quot;Co&quot;'));
+  assert.doesNotMatch(html, /<script>alert/);
+});
+
+test('buildVpatReportHtml sin pruebas de teclado no las menciona en los métodos', () => {
+  const html = buildVpatReportHtml(reportData({ keyboardResults: [] }), { date: FECHA });
+  assert.doesNotMatch(html, /pruebas de teclado del Agente/);
+});
+
+test('buildVpatReportHtml sin target usa la primera URL evaluada', () => {
+  const html = buildVpatReportHtml(reportData({ target: undefined }), { date: FECHA });
+  assert.ok(html.includes('https://a.test/p1'));
 });
