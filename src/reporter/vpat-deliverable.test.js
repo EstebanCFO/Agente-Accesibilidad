@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildVpatRows, CONFORMANCE } from './vpat-deliverable.js';
+import { buildVpatRows, resolveVpatInfo, CONFORMANCE } from './vpat-deliverable.js';
 import { computeWcagSection } from '../classification/wcag-section.js';
 
 const page = (url, passes = []) => ({ url, violations: [], incomplete: [], inapplicable: [], passes });
@@ -122,4 +122,36 @@ test('buildVpatRows ordena por número de criterio (2.4.10 después de 2.4.9)', 
   const ids = buildVpatRows({ axeResults: pages(1) }).AAA.map((r) => r.criterion);
   assert.ok(ids.indexOf('2.4.9') < ids.indexOf('2.4.10'));
   assert.equal(ids[0], '1.2.6');
+});
+
+const FECHA = new Date(2026, 9, 1);
+
+test('resolveVpatInfo usa los datos cargados (recortados)', () => {
+  const info = resolveVpatInfo(
+    { product_name: '  Home Banking Banco X ', product_version: '3.2', description: 'Portal de clientes', contact: 'a11y@banco.test' },
+    { target: 'https://hb.banco.test', channel: 'home_banking', date: FECHA }
+  );
+  assert.deepEqual(info, { productName: 'Home Banking Banco X', productVersion: '3.2', description: 'Portal de clientes', contact: 'a11y@banco.test' });
+});
+
+test('resolveVpatInfo sin datos completa con defaults', () => {
+  const info = resolveVpatInfo(undefined, { target: 'https://hb.banco.test/inicio', channel: 'home_banking', date: FECHA });
+  assert.equal(info.productName, 'hb.banco.test');
+  assert.equal(info.productVersion, `Evaluado el ${FECHA.toLocaleDateString('es-AR')}`);
+  assert.equal(info.description, 'Home Banking (web) — https://hb.banco.test/inicio');
+  assert.equal(info.contact, 'CFOTech IT Global Services');
+});
+
+test('resolveVpatInfo: campos vacíos o no-texto usan el default', () => {
+  const info = resolveVpatInfo({ product_name: '   ', contact: 42 }, { target: 'https://x.test', channel: 'app_ios', date: FECHA });
+  assert.equal(info.productName, 'x.test');
+  assert.equal(info.contact, 'CFOTech IT Global Services');
+  assert.equal(info.description, 'App iOS (vista móvil) — https://x.test');
+});
+
+test('resolveVpatInfo con carpeta local o file: usa el nombre de la carpeta/archivo', () => {
+  assert.equal(resolveVpatInfo(null, { target: 'C:\\sitios\\banco-demo', channel: 'home_banking', date: FECHA }).productName, 'banco-demo');
+  assert.equal(resolveVpatInfo(null, { target: 'C:\\sitios\\banco-demo\\', channel: 'home_banking', date: FECHA }).productName, 'banco-demo');
+  assert.equal(resolveVpatInfo(null, { target: 'file:///C:/sitios/mi%20banco/index.html', channel: 'home_banking', date: FECHA }).productName, 'index.html');
+  assert.equal(resolveVpatInfo(null, { target: '', channel: 'home_banking', date: FECHA }).productName, 'Sitio auditado');
 });

@@ -90,3 +90,42 @@ export function buildVpatRows({ findings = [], axeResults = [], includeExtended 
   for (const level of Object.keys(rows)) rows[level].sort((a, b) => compareCriteria(a.criterion, b.criterion));
   return rows;
 }
+
+const CHANNEL_LABEL = {
+  home_banking: 'Home Banking (web)',
+  app_ios: 'App iOS (vista móvil)',
+  app_android: 'App Android (vista móvil)'
+};
+const DEFAULT_CONTACT = 'CFOTech IT Global Services';
+
+function text(value) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+/** Nombre por defecto: dominio para http(s); para carpeta local o file:, el último segmento. */
+function defaultProductName(target) {
+  const raw = String(target ?? '').trim();
+  try {
+    const url = new URL(raw);
+    if (url.protocol === 'http:' || url.protocol === 'https:') return url.hostname;
+    if (url.protocol === 'file:') {
+      const last = decodeURIComponent(url.pathname).split('/').filter(Boolean).pop();
+      if (last) return last;
+    }
+  } catch {
+    // no es URL: path de carpeta local
+  }
+  // "C:\..." también parsea como URL con protocolo "c:": cae acá igual que un path sin protocolo.
+  return raw.split(/[\\/]/).filter(Boolean).pop() || 'Sitio auditado';
+}
+
+/** Datos del producto del VPAT: lo cargado en config.vpat o, si falta, valores por defecto. */
+export function resolveVpatInfo(vpat, { target, channel, date }) {
+  const v = vpat && typeof vpat === 'object' ? vpat : {};
+  return {
+    productName: text(v.product_name) ?? defaultProductName(target),
+    productVersion: text(v.product_version) ?? `Evaluado el ${date.toLocaleDateString('es-AR')}`,
+    description: text(v.description) ?? `${CHANNEL_LABEL[channel] ?? channel ?? 'Sitio web'} — ${String(target ?? '').trim()}`,
+    contact: text(v.contact) ?? DEFAULT_CONTACT
+  };
+}
