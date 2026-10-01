@@ -15,3 +15,15 @@ export function resolveAdditionalPageCount(rawAnswer, availableCount) {
 
   return Math.min(parsed, availableCount);
 }
+
+/**
+ * Resuelve qué páginas audita la demo a partir de las casillas marcadas en el panel. La página
+ * principal va siempre (aunque venga desmarcada o no venga), primero y sin duplicados. Solo se
+ * aceptan URLs que estaban entre las candidatas descubiertas - el panel no puede inyectar otras.
+ */
+export function resolveSelectedPages(mainUrl, candidates, selected) {
+  const allowed = new Set(candidates);
+  const picked = (Array.isArray(selected) ? selected : [])
+    .filter((url) => url !== mainUrl && allowed.has(url));
+  return [mainUrl, ...new Set(picked)];
+}
