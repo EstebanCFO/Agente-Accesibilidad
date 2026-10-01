@@ -2,12 +2,29 @@ import { chromium, errors as playwrightErrors } from 'playwright';
 import AxeBuilder from '@axe-core/playwright';
 import axeCore from 'axe-core';
 import esLocale from 'axe-core/locales/es.json' with { type: 'json' };
+import { walkKeyboard } from './keyboard/keyboard-walk.js';
+import { renderContactSheet } from './keyboard/contact-sheet.js';
+import { dismissConsentBanner } from './keyboard/consent-banner.js';
 
 // axe-core corre con su locale oficial en español (80 reglas / 92 checks traducidos por Deque)
 // para que help/failure_summary salgan nativos en los reportes en español, en vez del inglés
 // crudo por default. Verificado en vivo contra un sitio real: mismo conteo de violaciones,
 // solo cambia el idioma del texto. AxeBuilder reinyecta este mismo source en cada .analyze()
 // (incluso en la blank page interna de finishRun), así que el locale queda configurado siempre.
+/** Recorrido con Tab + hoja de contactos. Los recortes se usan para la hoja y no viajan en el resultado. */
+async function captureKeyboardEvidence(page) {
+  try {
+    // Un banner de cookies modal encierra el foco: se cierra antes (axe-core ya lo auditó).
+    const consentBanner = await dismissConsentBanner(page);
+    const walk = await walkKeyboard(page, { resetStart: consentBanner.dismissed });
+    const contactSheet = await renderContactSheet(page.context(), walk.stops);
+    const stops = walk.stops.map(({ focused_png: _f, unfocused_png: _u, ...stop }) => stop);
+    return { stops, ended: walk.ended, trap: walk.trap, contact_sheet: contactSheet, consent_banner: consentBanner };
+  } catch (error) {
+    return { stops: [], ended: 'error', trap: null, contact_sheet: null, error: error.message.split('\n')[0] };
+  }
+}
+
 const AXE_SOURCE_ES = `${axeCore.source};axe.configure({ locale: ${JSON.stringify(esLocale)} });`;
 
 // axe-core por default corre TODAS sus reglas, incluidas 5 que son puro ruido para este proyecto
@@ -18,6 +35,9 @@ const AXE_SOURCE_ES = `${axeCore.source};axe.configure({ locale: ${JSON.stringif
 // se usan hoy en el scan crudo (conteos y resaltado en vivo del demo), aunque classify-findings.js
 // las marque out_of_scope para el compliance ONTI. No se restringe a solo tags WCAG numerados
 // -eso se probó primero y rompía justamente esas ~30 reglas best-practice.
+const SCREENSHOT_JPEG_QUALITY = 70;
+const MAX_SCREENSHOT_HEIGHT = 7900;
+
 const DEFAULT_WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'];
 
 export class AuthRequiredError extends Error {
@@ -92,10 +112,12 @@ function toAxeResult(url, results, extras = {}) {
       }))
     })),
     passes: results.passes.map((item) => ({ id: item.id, tags: item.tags })),
-    inapplicable: results.inapplicable.map((item) => ({ id: item.id, tags: item.tags }))
+    inapplicable: results.inapplicable.map((item) => ({ id: item.id, tags: item.tags })),
+    rule_impacts: extras.ruleImpacts || {}
   };
   if (extras.screenshot) base.screenshot = extras.screenshot;
   if (extras.html) base.html = extras.html;
+  if (extras.keyboard) base.keyboard = extras.keyboard;
   return base;
 }
 
@@ -104,7 +126,7 @@ function toAxeResult(url, results, extras = {}) {
  * o de un solo uso en scanUrl). Cada llamada abre y cierra su propio context, para que auth/cookies
  * no se mezclen entre URLs concurrentes.
  */
-async function scanOne(browser, { url, wcagTags, auth, viewport, timeout, waitFor, captureScreenshot, captureHtml }) {
+async function scanOne(browser, { url, wcagTags, auth, viewport, timeout, waitFor, captureScreenshot, captureHtml, captureKeyboard }) {
   const context = await createContext(browser, auth, viewport);
   try {
     const page = await context.newPage();
@@ -126,28 +148,52 @@ async function scanOne(browser, { url, wcagTags, auth, viewport, timeout, waitFo
     const tagsToUse = Array.isArray(wcagTags) && wcagTags.length > 0 ? wcagTags : DEFAULT_WCAG_TAGS;
     axeBuilder.withTags(tagsToUse);
     const results = await axeBuilder.analyze();
+    // axe-core no trae impact en passes/inapplicable; la Sección 2 lo necesita para ponderar.
+    // Se lee de la metadata de las reglas best-practice ya inyectadas en la página.
+    // Solo las que corrieron en este análisis (la metadata incluye reglas experimentales que no).
+    const ranIds = [...results.violations, ...results.incomplete, ...results.passes, ...results.inapplicable].map((r) => r.id);
+    const ruleImpacts = await page.evaluate((ids) => Object.fromEntries(
+      (window.axe?._audit?.rules || [])
+        .filter((r) => ids.includes(r.id) && (r.tags || []).includes('best-practice'))
+        .map((r) => [r.id, r.impact ?? null])
+    ), ranIds).catch(() => ({}));
 
     const extras = {};
     if (captureScreenshot) {
-      const buffer = await page.screenshot({ fullPage: true });
+      // JPEG en vez de PNG: pesa varias veces menos, sube más rápido a la API y el modelo ve
+      // lo mismo. Alto recortado a 7.900px porque la API rechaza imágenes de más de 8.000px por
+      // lado (en páginas muy largas la captura completa fallaba).
+      const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight);
+      const pageWidth = page.viewportSize()?.width ?? await page.evaluate(() => document.documentElement.clientWidth);
+      const buffer = await page.screenshot({
+        fullPage: true,
+        type: 'jpeg',
+        quality: SCREENSHOT_JPEG_QUALITY,
+        ...(pageHeight > MAX_SCREENSHOT_HEIGHT ? { clip: { x: 0, y: 0, width: pageWidth, height: MAX_SCREENSHOT_HEIGHT } } : {})
+      });
       extras.screenshot = buffer.toString('base64');
     }
     if (captureHtml) {
       extras.html = await page.content();
     }
+    if (captureKeyboard) {
+      // Último paso: el recorrido mueve el foco y puede cambiar la página. Si falla, el escaneo
+      // de axe-core sigue valiendo: la Sección 3 marca la página como no evaluable.
+      extras.keyboard = await captureKeyboardEvidence(page);
+    }
 
-    return toAxeResult(url, results, extras);
+    return toAxeResult(url, results, { ...extras, ruleImpacts });
   } finally {
     await context.close();
   }
 }
 
-export async function scanUrl({ url, wcagTags, auth, viewport, timeout, waitFor, captureScreenshot, captureHtml }) {
+export async function scanUrl({ url, wcagTags, auth, viewport, timeout, waitFor, captureScreenshot, captureHtml, captureKeyboard }) {
   if (!url) throw new Error('scanUrl requiere "url"');
 
   const browser = await chromium.launch();
   try {
-    return await scanOne(browser, { url, wcagTags, auth, viewport, timeout, waitFor, captureScreenshot, captureHtml });
+    return await scanOne(browser, { url, wcagTags, auth, viewport, timeout, waitFor, captureScreenshot, captureHtml, captureKeyboard });
   } finally {
     await browser.close();
   }
@@ -168,7 +214,7 @@ function classifyError(error) {
   return { type: 'unknown', message: error.message };
 }
 
-export async function scanBatch({ urlList, wcagTags, auth, workers = 3, viewport, timeout, waitFor, captureScreenshot, captureHtml }) {
+export async function scanBatch({ urlList, wcagTags, auth, workers = 3, viewport, timeout, waitFor, captureScreenshot, captureHtml, captureKeyboard }) {
   if (!Array.isArray(urlList) || urlList.length === 0) {
     throw new Error('scanBatch requiere "urlList" no vacío');
   }
@@ -184,7 +230,7 @@ export async function scanBatch({ urlList, wcagTags, auth, workers = 3, viewport
         const index = nextIndex++;
         const url = urlList[index];
         try {
-          results[index] = await scanOne(browser, { url, wcagTags, auth, viewport, timeout, waitFor, captureScreenshot, captureHtml });
+          results[index] = await scanOne(browser, { url, wcagTags, auth, viewport, timeout, waitFor, captureScreenshot, captureHtml, captureKeyboard });
         } catch (error) {
           results[index] = { url, error: classifyError(error) };
         }

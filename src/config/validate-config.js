@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 const VALID_CHANNELS = ['home_banking', 'app_ios', 'app_android'];
 const VALID_MODES = ['url_list', 'crawl'];
+const VPAT_FIELDS = ['product_name', 'product_version', 'description', 'contact'];
 
 function buildDefaults() {
   return {
@@ -10,7 +11,6 @@ function buildDefaults() {
       baseline: 'onti_2019',
       levels: ['A', 'AA'],
       base_tags: ['wcag2a', 'wcag2aa'],
-      conformance_threshold: 30,
       extended_22: false,
       extended_22_tags: ['wcag21a', 'wcag21aa', 'wcag22aa']
     },
@@ -26,7 +26,7 @@ function buildDefaults() {
       include_patterns: [],
       exclude_patterns: []
     },
-    skills: { visual_audit: true, ux_compliance_review: true, generate_remediation_plan: true },
+    skills: { keyboard_review: true, generate_remediation_plan: true },
     output: { formats: ['html', 'json', 'xlsx'], path: './reports', include_screenshots: true, language: 'es' },
     agent: { max_iterations: 30, log_level: 'info', model: 'claude-sonnet-5' }
   };
@@ -70,20 +70,53 @@ export function validateConfig(rawConfig) {
     return { valid: false, errors, config: null };
   }
 
+  // Campos retirados (spec 2026-09-30): el resultado ya no tiene umbral de conformidad y la
+  // revisión visual/UX se reemplazó por keyboard_review. Una config vieja sigue siendo válida:
+  // esos campos se ignoran con un aviso.
+  const warnings = [];
+  const rawWcag = { ...(raw.wcag || {}) };
+  if ('conformance_threshold' in rawWcag) {
+    delete rawWcag.conformance_threshold;
+    warnings.push('wcag.conformance_threshold se ignora: el resultado es un conteo OK/NOK/a validar, sin umbral de conformidad');
+  }
+  const rawSkills = { ...(raw.skills || {}) };
+  for (const retired of ['visual_audit', 'ux_compliance_review']) {
+    if (retired in rawSkills) {
+      delete rawSkills[retired];
+      warnings.push(`skills.${retired} se ignora: se reemplazó por keyboard_review`);
+    }
+  }
+
+  // Datos del producto para el VPAT (spec 2026-10-01): opcionales; lo que falte se completa con
+  // valores por defecto al generar el informe. Lo mal formado se ignora con aviso, nunca frena.
+  const vpat = {};
+  if (raw.vpat !== undefined) {
+    if (raw.vpat && typeof raw.vpat === 'object' && !Array.isArray(raw.vpat)) {
+      for (const key of VPAT_FIELDS) {
+        if (!(key in raw.vpat)) continue;
+        if (typeof raw.vpat[key] === 'string') vpat[key] = raw.vpat[key];
+        else warnings.push(`vpat.${key} se ignora: tiene que ser texto`);
+      }
+    } else {
+      warnings.push('vpat se ignora: tiene que ser un objeto con product_name, product_version, description y contact');
+    }
+  }
+
   const defaults = buildDefaults();
   const config = {
     job_id: raw.job_id || randomUUID(),
     description: raw.description || '',
     target: { channel, mode, root_url: rootUrl ?? null, urls: urls ?? [] },
     auth: deepMerge(defaults.auth, raw.auth),
-    wcag: deepMerge(defaults.wcag, raw.wcag),
+    wcag: deepMerge(defaults.wcag, rawWcag),
     scope: deepMerge(defaults.scope, raw.scope),
-    skills: deepMerge(defaults.skills, raw.skills),
+    skills: deepMerge(defaults.skills, rawSkills),
     output: deepMerge(defaults.output, raw.output),
-    agent: deepMerge(defaults.agent, raw.agent)
+    agent: deepMerge(defaults.agent, raw.agent),
+    vpat
   };
 
-  return { valid: true, errors: [], config };
+  return { valid: true, errors: [], warnings, config };
 }
 
 const REDACTED = '[REDACTED]';

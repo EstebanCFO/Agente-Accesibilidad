@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import path from 'node:path';
 import http from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { writeFile, mkdir } from 'node:fs/promises';
 import Anthropic from '@anthropic-ai/sdk';
 import { chromium } from 'playwright';
 import { log as crawleeLog, LogLevel } from 'crawlee';
@@ -14,47 +14,30 @@ import { crawlSite } from '../src/discovery/crawl-site.js';
 crawleeLog.setLevel(LogLevel.OFF);
 import { classifyFindings } from '../src/classification/classify-findings.js';
 import { calculateScore } from '../src/classification/calculate-score.js';
-import { runVisualAudit } from '../src/visual-review/visual-audit.js';
-import { runUxComplianceReview } from '../src/visual-review/ux-compliance-review.js';
+import { summarizeRuleChecks } from '../src/classification/rule-checks.js';
+import { runKeyboardReview } from '../src/keyboard/keyboard-review.js';
+import { buildKeyboardCriteria, computeKeyboardScore, KEYBOARD_CRITERIA } from '../src/keyboard/keyboard-criteria.js';
 import { generateDeliverable } from '../src/reporter/generate-deliverable.js';
-import { resolveTargetUrl, resolveReferenceSiteUrl, REFERENCE_SITES } from './demo-site-selection.js';
-import { resolveAdditionalPageCount } from './demo-page-selection.js';
+import { emptyUsage, addUsage, totalTokens, resolvePricing, estimateCostUsd, PRICING_SOURCE_DATE } from '../src/ai/usage-cost.js';
+import { resolveSelectedPages } from './demo-page-selection.js';
+import { buildConfigFields, buildConfigSummary, defaultConfigValues, validateDemoConfig, previewTarget, MAX_PAGES_LIMIT } from './demo-config.js';
+import { countViolationsByImpact, isWcagViolation, buildWcagCard, buildBestPracticesCard, formatPageChecks, buildSeverityCard, buildKeyboardCard, buildUsageCard } from './demo-results.js';
+import { runWithConcurrency } from './demo-concurrency.js';
+import { buildReportViewerHtml } from './demo-report-viewer.js';
 import { isLocalPath, listHtmlFiles, toFileUrl } from './demo-local-source.js';
 import { buildHighlightTargets, buildBadgeText } from './demo-highlight.js';
-import { createDemoServer } from './demo-server.js';
-import { computeWindowLayout } from './demo-window-layout.js';
+import { createDemoServer, DemoCancelledError } from './demo-server.js';
 
-// Con 10 páginas el crawl real tardó ~29s en pruebas en vivo (sin ningún aviso, se puede
-// confundir con que la demo se colgó) - se recorta a 6 para que el paso 1 quede en ~15-20s.
-const MAX_PAGES_TO_DISCOVER = 6;
-
-// Base validada visualmente en un spike real (260px) - ver
-// docs/superpowers/specs/2026-09-23-demo-panel-design.md. Agrandado +10% a pedido del usuario
-// para mejorar la legibilidad del panel (más lugar para el stepper/botones/log).
-const PANEL_HEIGHT = 286;
 
 /**
  * Demo guionada para audiencia C-level: pasos fijos y controlados por el presentador (no el
  * loop autónomo del agente, que decide su propio flujo - acá queremos previsibilidad). El
- * control (selección de opciones + ver los 6 pasos avanzar) es el panel web; esta función solo
- * imprime el banner en la terminal como respaldo/debug y le avisa al panel qué paso está activo.
+ * control (configuración, selección de páginas y avance de los 5 pasos) es el panel web; esta
+ * función solo imprime el banner en la terminal como respaldo/debug.
  */
-function header(n, title, pushStep) {
+function header(n, title) {
   const line = '─'.repeat(60);
   console.log(`\n${line}\nPASO ${n}: ${title}\n${line}`);
-  pushStep(n);
-}
-
-/**
- * CDP necesita 2 llamadas separadas: la primera fuerza windowState:'normal' (sin esto, una sola
- * llamada combinada con bounds reales fue silenciosamente ignorada en la práctica - CDP
- * respondía OK pero la ventana no cambiaba de tamaño en pantalla). Ver la spec para el detalle.
- */
-async function setWindowBounds(page, bounds) {
-  const client = await page.context().newCDPSession(page);
-  const { windowId } = await client.send('Browser.getWindowForTarget');
-  await client.send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'normal' } });
-  await client.send('Browser.setWindowBounds', { windowId, bounds });
 }
 
 async function highlightOnPage(page, violations) {
@@ -80,246 +63,516 @@ async function highlightOnPage(page, violations) {
   }, { targets, badgeText });
 }
 
-function serveDirectory(rootDir) {
-  return http.createServer(async (req, res) => {
-    const filePath = path.join(rootDir, req.url === '/' ? 'dashboard.html' : req.url);
-    try {
-      const data = await readFile(filePath);
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(data);
-    } catch {
-      res.writeHead(404);
-      res.end('No encontrado');
+// El informe se acota a tres entregables: Score de cumplimiento inicial (vista del dashboard +
+// score-compliance.json), Inventario de hallazgos y Matriz de criticidad; el PDF los consolida.
+// Además se genera el VPAT 2.5 (edición WCAG) en su propio PDF, para entregar al cliente.
+const DELIVERABLES = [
+  { type: 'score', label: 'Score de cumplimiento (datos)' },
+  { type: 'dashboard', key: 'dashboard', label: 'Score de cumplimiento inicial', open: 'dashboard.html' },
+  { type: 'inventario', key: 'inventario', label: 'Inventario de hallazgos', open: 'inventario-hallazgos.html' },
+  { type: 'matriz', key: 'matriz', label: 'Matriz de criticidad WCAG 2.0 AA', open: 'matriz-criticidad.html' },
+  { type: 'informe-pdf', key: 'pdf', label: 'Informe PDF consolidado', open: 'informe-consolidado.pdf' },
+  { type: 'vpat', key: 'vpat', label: 'VPAT 2.5 (WCAG)', open: 'vpat-wcag.pdf' }
+];
+
+/** Mensaje corto y legible para la audiencia (sin JSON crudo de la API ni stack traces). */
+function friendlyError(error) {
+  if (error?.status === 401) return 'la clave de la API de IA no es válida';
+  if (error?.status === 429) return 'la API de IA está saturada, reintentá en unos minutos';
+  if (error?.status >= 500) return 'el servicio de IA no respondió';
+  if (/net::ERR_|Timeout \d+ms exceeded/.test(String(error?.message))) return 'el sitio no respondió (revisá la URL o la conexión)';
+  if (error?.code === 'ENOENT') return `no se encontró la ruta ${error.path ?? ''}`.trim();
+  if (error?.code === 'EACCES') return `no hay permiso para leer ${error.path ?? 'la ruta'}`;
+  const firstLine = String(error?.message ?? error).split('\n')[0];
+  return firstLine.length > 140 ? firstLine.slice(0, 137) + '…' : firstLine;
+}
+
+function shortUrl(url) {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'file:' ? path.basename(decodeURIComponent(u.pathname)) : (u.hostname + u.pathname).replace(/\/$/, '');
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Recorre una URL una sola vez y guarda el resultado: el formulario lo usa para autocompletar
+ * "Máx. de páginas" con el total encontrado, y el paso 1 lo reutiliza sin volver a recorrer.
+ * Siempre devuelve la principal primero, sin duplicados.
+ */
+const discoveryCache = new Map();
+function discoverSite(url) {
+  if (!discoveryCache.has(url)) {
+    const promise = crawlSite(url, { maxUrls: MAX_PAGES_LIMIT })
+      .then((urls) => [url, ...new Set(urls.filter((u) => u !== url))])
+      .catch((error) => {
+        discoveryCache.delete(url);
+        throw error;
+      });
+    discoveryCache.set(url, promise);
+  }
+  return discoveryCache.get(url);
+}
+
+/** Formulario → resumen → (volver) hasta tener una config válida confirmada. */
+async function configure(ui, formValues) {
+  let values = formValues;
+  let errors = {};
+  while (true) {
+    const raw = await ui.askPanel({
+      kind: 'config',
+      text: 'Configurá la auditoría',
+      subtitle: 'Definí qué auditar y con qué alcance. Debajo ves una vista previa de lo que se va a escanear.',
+      fields: buildConfigFields(values),
+      errors,
+      submitLabel: 'Continuar'
+    });
+    values = { ...values, ...raw };
+    const result = validateDemoConfig(values);
+    if (!result.config) {
+      errors = result.errors;
+      continue;
     }
+    return { config: result.config, values };
+  }
+}
+
+/**
+ * Paso 1: arma la lista de páginas y la muestra con casillas junto con la configuración elegida
+ * (reemplaza al resumen previo). null = volver a configurar.
+ */
+async function discoverPages(ui, config) {
+  let mainUrl;
+  let candidates = [];
+  let preselected = null; // null = todas marcadas
+
+  if (config.source === 'local' || isLocalPath(config.target)) {
+    ui.pushProgress(`Buscando archivos .html en ${config.target}`);
+    const htmlFiles = await listHtmlFiles(config.target);
+    if (htmlFiles.length === 0) throw new Error(`No se encontraron archivos .html en ${config.target}`);
+    const urls = htmlFiles.slice(0, config.maxPages ?? htmlFiles.length).map(toFileUrl);
+    [mainUrl, ...candidates] = urls;
+    ui.pushLog(`Se encontraron ${htmlFiles.length} archivo(s) .html.`, 'ok');
+  } else {
+    // URL del cliente o sitio de referencia: se muestran las páginas que encontró "Analizar sitio"
+    // (marcadas las elegidas en el formulario). Sin análisis previo, solo la principal.
+    mainUrl = config.target;
+    if (discoveryCache.has(mainUrl) || config.selectedPages.length > 0) {
+      try {
+        candidates = (await discoverSite(mainUrl)).slice(1);
+      } catch (error) {
+        ui.pushLog(`No se pudo recuperar el análisis del sitio (${friendlyError(error)}). Se sigue solo con la principal.`, 'warn');
+      }
+    }
+    preselected = new Set(config.selectedPages);
+  }
+  ui.throwIfCancelled();
+
+  const answer = await ui.askPanel({
+    kind: 'checklist',
+    text: 'Elegí qué páginas auditar',
+    summary: buildConfigSummary(config),
+    items: [
+      { value: mainUrl, label: shortUrl(mainUrl), checked: true, locked: true },
+      ...candidates.map((url) => ({ value: url, label: shortUrl(url), checked: preselected ? preselected.has(url) : true }))
+    ],
+    submitLabel: 'Confirmar páginas',
+    workingText: 'Escaneando…',
+    backLabel: 'Volver a configurar'
+  });
+  if (answer?.action === 'back') return null;
+  return resolveSelectedPages(mainUrl, candidates, answer?.selected);
+}
+
+// Llamadas simultáneas a la API de IA. 4 equilibra velocidad y límites de uso de la cuenta.
+const AI_CONCURRENCY = Number(process.env.AI_CONCURRENCY) || 4;
+const AI_MODEL = process.env.AI_MODEL || 'claude-sonnet-5';
+
+/**
+ * Pruebas de teclado del Agente: el recorrido con Tab ya se hizo durante el escaneo; acá se lanza
+ * en paralelo la interpretación con IA (una consulta por página), se arma el resultado de los 4
+ * criterios por página (si la IA falla, con las reglas solas) y se actualizan las tarjetas.
+ */
+function startKeyboardReviews(ui, axeResults, config, anthropicClient) {
+  const pricing = resolvePricing(AI_MODEL, process.env);
+  const state = { results: new Map(), usage: emptyUsage(), pending: 0, listeners: [], done: [] };
+  const withKeyboard = config.keyboardReview ? axeResults.filter((r) => r.keyboard) : [];
+  const refreshCards = () => {
+    if (withKeyboard.length === 0) return;
+    ui.pushResult(buildKeyboardCard(computeKeyboardScore([...state.results.values()]), { pending: state.pending }));
+    if (state.usage.calls > 0) ui.pushResult(buildUsageCard(state.usage, estimateCostUsd(state.usage, pricing)));
+  };
+  const setResult = (url, criteria, status) => {
+    const consentBanner = withKeyboard.find((r) => r.url === url)?.keyboard.consent_banner ?? null;
+    state.results.set(url, { url, criteria, status, consent_banner: consentBanner });
+    state.listeners.forEach((fn) => fn());
+  };
+
+  const specs = [];
+  for (const r of withKeyboard) {
+    const kb = r.keyboard;
+    if (kb.consent_banner?.dismissed) ui.pushLog(`${shortUrl(r.url)}: se cerró un banner de cookies (${kb.consent_banner.action}) antes del recorrido con Tab.`);
+    else if (kb.consent_banner?.detected) ui.pushLog(`${shortUrl(r.url)}: no se pudo cerrar el banner de cookies; el recorrido puede haber quedado dentro del banner.`, 'warn');
+    if (kb.error || kb.stops.length === 0 || !kb.contact_sheet) {
+      setResult(r.url, buildKeyboardCriteria(kb.error ? null : kb, { error: kb.error }), 'done');
+    } else {
+      specs.push({ url: r.url, keyboard: kb, run: () => runKeyboardReview({ url: r.url, keyboard: kb }, { anthropicClient, model: AI_MODEL }) });
+    }
+  }
+  state.pending = specs.length;
+  if (specs.length > 0) ui.pushLog(`Pruebas de teclado: el Agente interpreta ${specs.length} recorrido(s) en segundo plano, hasta ${AI_CONCURRENCY} a la vez.`);
+  refreshCards();
+
+  const promises = runWithConcurrency(specs.map((spec) => spec.run), AI_CONCURRENCY);
+  specs.forEach((spec, i) => {
+    state.done.push(promises[i].then(({ ok, value, error }) => {
+      state.pending -= 1;
+      if (ok) {
+        state.usage = addUsage(state.usage, value.usage);
+        setResult(spec.url, buildKeyboardCriteria(spec.keyboard, { ai: value.review }), 'done');
+      } else {
+        ui.pushLog(`Interpretación del Agente no disponible para ${shortUrl(spec.url)}: ${friendlyError(error)}. Se usan las reglas automáticas.`, 'warn');
+        setResult(spec.url, buildKeyboardCriteria(spec.keyboard, { aiFailed: true }), 'failed');
+      }
+      const con = KEYBOARD_CRITERIA.filter((c) => state.results.get(spec.url).criteria[c.id].estado === 'con_indicios').length;
+      ui.pushLog(`${shortUrl(spec.url)}: teclado — ${con} de ${KEYBOARD_CRITERIA.length} criterios con indicios.`, con ? 'warn' : 'ok');
+      refreshCards();
+    }));
+  });
+
+  return {
+    /** Resultados por página, en el orden del escaneo. */
+    results() { return axeResults.map((r) => state.results.get(r.url)).filter(Boolean); },
+    status(url) { return state.results.get(url)?.status ?? 'pending'; },
+    notes(url) {
+      const result = state.results.get(url);
+      if (!result) return [];
+      return KEYBOARD_CRITERIA
+        .filter((c) => result.criteria[c.id].estado !== 'sin_indicios')
+        .map((c) => ({ text: result.criteria[c.id].motivo, criterion: `${c.id} ${c.label}` }));
+    },
+    onProgress(listener) { state.listeners.push(listener); },
+    async waitAll(label) {
+      let finished = 0;
+      const show = () => ui.pushProgress(label, finished, state.done.length);
+      state.done.forEach((p) => p.then(() => { finished += 1; show(); }));
+      await Promise.resolve();
+      show();
+      await Promise.all(state.done);
+      ui.throwIfCancelled();
+    },
+    usageReport() {
+      return {
+        model: AI_MODEL,
+        pricing_usd_per_mtok: pricing,
+        pricing_source_date: PRICING_SOURCE_DATE,
+        ...state.usage,
+        total_tokens: totalTokens(state.usage),
+        estimated_cost_usd: estimateCostUsd(state.usage, pricing),
+        note: 'Costo estimado a partir de la tabla de precios pública; el valor facturado es el de la consola de Anthropic.'
+      };
+    }
+  };
+}
+
+/** Pausa entre pasos: deja claro qué terminó y qué viene. */
+async function gate(ui, doneText, nextText) {
+  await ui.askPanel({
+    kind: 'buttons',
+    text: doneText,
+    subtitle: `A continuación: ${nextText}`,
+    options: [{ label: 'Continuar', value: 'continue', workingText: 'Procesando…' }]
   });
 }
 
-async function main() {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.error('Falta ANTHROPIC_API_KEY en el entorno - la demo necesita llamar a Claude para los pasos 4 y 5.');
-    process.exit(1);
+/**
+ * Capturas para mostrar dentro del panel: abre la URL en un navegador invisible, opcionalmente
+ * la prepara (ej: marcar problemas) y devuelve la captura como data URL JPEG. Caché por URL
+ * para la vista previa (sin preparar) - no se vuelve a cargar el sitio si no cambió.
+ */
+function createStage(context) {
+  const previews = new Map();
+  async function shoot(url, prepare) {
+    const page = await context.newPage();
+    try {
+      await page.goto(url, { waitUntil: 'load', timeout: 30000 });
+      if (prepare) await prepare(page);
+      await page.waitForTimeout(400);
+      const buffer = await page.screenshot({ type: 'jpeg', quality: 70 });
+      return `data:image/jpeg;base64,${buffer.toString('base64')}`;
+    } finally {
+      await page.close().catch(() => {});
+    }
   }
+  return {
+    capture(url, prepare) {
+      if (prepare) return shoot(url, prepare);
+      if (!previews.has(url)) {
+        previews.set(url, shoot(url).catch((error) => { previews.delete(url); throw error; }));
+      }
+      return previews.get(url);
+    }
+  };
+}
 
-  const { app, askPanel, pushStep, pushLog, cancelPending } = createDemoServer();
-  const controlServer = http.createServer(app);
-  await new Promise((resolve) => controlServer.listen(0, resolve));
-  const { port: controlPort } = controlServer.address();
+async function runDemo(ui, { stage }) {
+  let formValues = defaultConfigValues();
+  let config;
+  let pagesToAudit;
 
-  const panelBrowser = await chromium.launch({ headless: false });
-  const panelPage = await (await panelBrowser.newContext({ viewport: null })).newPage();
-  await panelPage.goto(`http://localhost:${controlPort}/panel`);
-
-  const { width: screenWidth, height: screenHeight } = await panelPage.evaluate(() => ({
-    width: window.screen.width,
-    height: window.screen.height
-  }));
-  const layout = computeWindowLayout(screenWidth, screenHeight, PANEL_HEIGHT);
-  await setWindowBounds(panelPage, layout.panel);
-  pushStep(0);
-
-  const browser = await chromium.launch({ headless: false });
-  const context = await browser.newContext({ viewport: null });
-  const page = await context.newPage();
-  await setWindowBounds(page, layout.test);
-
-  panelBrowser.on('disconnected', () => cancelPending(new Error('Se cerró la ventana del panel')));
-  browser.on('disconnected', () => cancelPending(new Error('Se cerró el navegador de prueba')));
-
-  console.log('=== Demo: Agente F1 de Compliance de Accesibilidad ===');
-  const choice = await askPanel({
-    kind: 'buttons',
-    text: 'Elegí cómo vas a auditar',
-    options: [
-      { label: 'Sitio de referencia', value: '1' },
-      { label: 'Sitio del cliente', value: '2' },
-      { label: 'Otra URL o carpeta local', value: '3' }
-    ]
-  });
-
-  let customInput;
-  let referenceSiteUrl;
-  if (choice === '1') {
-    const subChoice = await askPanel({
-      kind: 'buttons',
-      text: 'Elegí un sitio de referencia',
-      options: REFERENCE_SITES.map((site, i) => ({ label: site.label, value: String(i + 1) }))
-    });
-    referenceSiteUrl = resolveReferenceSiteUrl(subChoice);
-  } else if (['2', '3'].includes(choice)) {
-    customInput = await askPanel({
-      kind: 'text',
-      text: 'Pegá la URL o el path de una carpeta local',
-      placeholder: 'https://... o C:\\...'
-    });
+  while (true) {
+    ui.goToStep(0);
+    ui.pushStage({ type: 'clear' });
+    ({ config, values: formValues } = await configure(ui, formValues));
+    ui.setSkipped(config.keyboardReview ? [] : [4]);
+    ui.goToStep(1, 'Relevar páginas');
+    pagesToAudit = await discoverPages(ui, config);
+    if (pagesToAudit) break;
   }
 
   const anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const jobId = `demo-${Date.now()}`;
   const outputDir = path.join('./reports', jobId);
+  ui.pushLog(`Se van a auditar ${pagesToAudit.length} página(s).`, 'ok');
 
-  header(1, 'Descubrir', pushStep);
-  let pagesToAudit;
-
-  if (choice === '3' && isLocalPath(customInput)) {
-    console.log(`Buscando archivos .html en: ${customInput}`);
-    const htmlFiles = await listHtmlFiles(customInput);
-    console.log(`Se encontraron ${htmlFiles.length} archivo(s) .html:`);
-    htmlFiles.forEach((f, i) => console.log(`  ${i + 1}) ${f}`));
-    pushLog(`Se encontraron ${htmlFiles.length} archivo(s) .html en ${customInput}`);
-
-    const mainUrl = toFileUrl(htmlFiles[0]);
-    const rest = htmlFiles.slice(1).map(toFileUrl);
-    if (rest.length > 0) {
-      const answer = await askPanel({
-        kind: 'text',
-        text: `¿Cuántos de estos querés auditar además del primero? (0-${rest.length})`,
-        placeholder: '0'
-      });
-      const additionalCount = resolveAdditionalPageCount(answer, rest.length);
-      pagesToAudit = [mainUrl, ...rest.slice(0, additionalCount)];
-    } else {
-      pagesToAudit = [mainUrl];
-    }
-  } else {
-    const targetUrl = choice === '1' ? referenceSiteUrl : resolveTargetUrl(choice, customInput);
-    console.log(`Recorriendo el sitio desde: ${targetUrl}`);
-    console.log('(Esto puede tardar unos 25-30 segundos reales - el agente está navegando el sitio de verdad, no es un valor simulado.)');
-    pushLog(`Recorriendo el sitio desde: ${targetUrl}`);
-    let discoveredUrls = [];
-    try {
-      discoveredUrls = await crawlSite(targetUrl, { maxUrls: MAX_PAGES_TO_DISCOVER });
-    } catch (error) {
-      console.log(`No se pudo recorrer el sitio automáticamente (${error.message}) - se sigue solo con la página principal.`);
-      pushLog('No se pudo recorrer el sitio automáticamente - se sigue solo con la página principal.');
-    }
-    const subpages = discoveredUrls.filter((url) => url !== targetUrl);
-
-    pagesToAudit = [targetUrl];
-    if (subpages.length > 0) {
-      console.log(`Se encontraron ${subpages.length} subpágina(s) además de la principal:`);
-      subpages.forEach((url, i) => console.log(`  ${i + 1}) ${url}`));
-      pushLog(`Se encontraron ${subpages.length} subpágina(s) además de la principal.`);
-      const answer = await askPanel({
-        kind: 'text',
-        text: `¿Cuántas de estas querés auditar además de la principal? (0-${subpages.length})`,
-        placeholder: '0'
-      });
-      const additionalCount = resolveAdditionalPageCount(answer, subpages.length);
-      pagesToAudit = [targetUrl, ...subpages.slice(0, additionalCount)];
-    } else {
-      console.log('No se encontraron subpáginas adicionales (o el sitio no permitió recorrerlo) - se sigue solo con la página principal.');
-      pushLog('No se encontraron subpáginas adicionales - se sigue solo con la página principal.');
-    }
-  }
-
-  console.log(`\nSe van a auditar ${pagesToAudit.length} página(s) en total.`);
-  pushLog(`Se van a auditar ${pagesToAudit.length} página(s) en total.`);
-  await askPanel({
-    kind: 'buttons',
-    text: 'Escanear cada página con el motor de accesibilidad',
-    options: [{ label: 'Siguiente paso →', value: 'continue' }]
-  });
-
-  header(2, 'Escanear', pushStep);
+  // Paso 2: escanear
+  ui.goToStep(2, 'Escanear');
+  // "Confirmar páginas" ya es la confirmación del presentador: el escaneo arranca directo.
+  ui.pushLog('El agente de accesibilidad revisa cada página contra los 38 criterios de la normativa BCRA y marca los problemas sobre la propia página.');
   const axeResults = [];
-  for (const url of pagesToAudit) {
-    console.log(`\nEscaneando: ${url}`);
-    pushLog(`Escaneando: ${url}`);
-    // waitFor:'load' en vez del default 'networkidle' - varios sitios reales (analytics, chat
-    // widgets, polling) nunca llegan a red inactiva y cuelgan el escaneo en una demo en vivo.
-    const axeResult = await scanUrl({ url, captureScreenshot: true, captureHtml: true, waitFor: 'load' });
-    console.log(`  ${axeResult.violation_count} problema(s) técnico(s) detectado(s), ${axeResult.pass_count} chequeo(s) aprobado(s).`);
-    pushLog(`  ${axeResult.violation_count} problema(s) detectado(s), ${axeResult.pass_count} chequeo(s) aprobado(s).`);
-    await page.goto(url, { waitUntil: 'domcontentloaded' });
-    await highlightOnPage(page, axeResult.violations);
-    await page.waitForTimeout(1200);
-    axeResults.push(axeResult);
+  for (const [i, url] of pagesToAudit.entries()) {
+    ui.throwIfCancelled();
+    ui.pushProgress(`Escaneando ${shortUrl(url)}`, i + 1, pagesToAudit.length);
+    try {
+      // waitFor:'load' en vez de 'networkidle' - varios sitios reales (analytics, chat widgets,
+      // polling) nunca llegan a red inactiva y cuelgan el escaneo en una demo en vivo.
+      const axeResult = await scanUrl({
+        url, wcagTags: config.wcagTags, auth: config.auth, viewport: config.viewport,
+        captureKeyboard: config.keyboardReview, waitFor: 'load'
+      });
+      axeResults.push(axeResult);
+      // El log, la tarjeta y el resaltado cuentan solo WCAG (las buenas prácticas van en su propia sección).
+      const wcagScope = { includeExtended: config.includeExtended };
+      const wcagViolations = axeResult.violations.filter((v) => isWcagViolation(v, wcagScope));
+      ui.pushLog(`${shortUrl(url)}: ${formatPageChecks(summarizeRuleChecks(axeResult, wcagScope))}.`, wcagViolations.length ? 'warn' : 'ok');
+      ui.pushResult(buildSeverityCard(countViolationsByImpact(axeResults, wcagScope), wcagScope));
+      try {
+        // La página escaneada se muestra embebida en el panel con los problemas marcados.
+        const image = await stage.capture(url, (p) => highlightOnPage(p, wcagViolations));
+        ui.pushStage({ type: 'image', src: image, caption: shortUrl(url) });
+      } catch {
+        // El resaltado es solo visual para la audiencia: si falla, la auditoría sigue.
+      }
+    } catch (error) {
+      ui.pushLog(`No se pudo escanear ${shortUrl(url)}: ${friendlyError(error)}`, 'error');
+    }
   }
-  console.log('\nLos problemas quedaron marcados directamente sobre cada página (rojo = crítico, naranja = serio, amarillo = moderado).');
-  await askPanel({
-    kind: 'buttons',
-    text: 'Clasificar los hallazgos contra la normativa argentina (ONTI/BCRA)',
-    options: [{ label: 'Siguiente paso →', value: 'continue' }]
-  });
-
-  header(3, 'Clasificar contra ONTI/BCRA', pushStep);
-  const { findings } = classifyFindings(axeResults);
-  const scores = calculateScore(findings, { axeResults });
-  console.log(`Páginas evaluadas: ${scores.summary.total_urls_evaluated}. Criterios ONTI evaluados: ${scores.summary.onti_criteria_evaluated}. Conformes: ${scores.summary.onti_criteria_compliant}. Score: ${scores.summary.onti_compliance_percentage}%.`);
-  pushLog(`Criterios ONTI evaluados: ${scores.summary.onti_criteria_evaluated}. Conformes: ${scores.summary.onti_criteria_compliant}. Score: ${scores.summary.onti_compliance_percentage}%.`);
-  await askPanel({
-    kind: 'buttons',
-    text: 'Revisión visual con inteligencia artificial (contraste, spacing, touch targets)',
-    options: [{ label: 'Siguiente paso →', value: 'continue' }]
-  });
-
-  header(4, 'Revisión visual con IA', pushStep);
-  const visualFindings = [];
-  for (const axeResult of axeResults) {
-    console.log(`\nMandando la captura de ${axeResult.url} a la IA (esto puede tardar unos segundos)...`);
-    pushLog(`Mandando la captura de ${axeResult.url} a la IA...`);
-    const { visual_findings } = await runVisualAudit({ url: axeResult.url, screenshot: axeResult.screenshot }, { anthropicClient });
-    console.log(`  ${visual_findings.length} hallazgo(s) visual(es) adicional(es).`);
-    pushLog(`  ${visual_findings.length} hallazgo(s) visual(es) adicional(es).`);
-    for (const f of visual_findings.slice(0, 3)) console.log(`    • [${f.severity}] ${f.failure_summary}`);
-    visualFindings.push(...visual_findings);
+  if (axeResults.length === 0) throw new Error('No se pudo escanear ninguna de las páginas seleccionadas.');
+  if (axeResults.length < pagesToAudit.length * 0.8) {
+    ui.pushLog(`Solo se escaneó ${axeResults.length} de ${pagesToAudit.length} páginas: el resultado es parcial.`, 'warn');
   }
-  await askPanel({
-    kind: 'buttons',
-    text: 'Revisión de experiencia de usuario con IA',
-    options: [{ label: 'Siguiente paso →', value: 'continue' }]
-  });
+  // La interpretación del recorrido de teclado arranca YA, en segundo plano y en paralelo (hasta
+  // AI_CONCURRENCY a la vez): mientras el presentador comenta el escaneo y la clasificación, la IA
+  // ya está trabajando. El paso 4 después solo espera lo que falte.
+  const keyboard = startKeyboardReviews(ui, axeResults, config, anthropicClient);
+  await gate(ui, `Escaneo terminado: ${axeResults.length} página(s) revisadas`, 'clasificar los hallazgos contra la normativa ONTI/BCRA.');
 
-  header(5, 'Revisión de UX con IA', pushStep);
-  const uxFindings = [];
-  for (const axeResult of axeResults) {
-    console.log(`\nMandando el HTML de ${axeResult.url} a la IA...`);
-    pushLog(`Mandando el HTML de ${axeResult.url} a la IA...`);
-    const { ux_findings } = await runUxComplianceReview({ url: axeResult.url, html: axeResult.html }, { anthropicClient });
-    console.log(`  ${ux_findings.length} hallazgo(s) de experiencia de usuario adicional(es).`);
-    pushLog(`  ${ux_findings.length} hallazgo(s) de experiencia de usuario adicional(es).`);
-    for (const f of ux_findings.slice(0, 3)) console.log(`    • [${f.severity}] ${f.failure_summary}`);
-    uxFindings.push(...ux_findings);
+  // Paso 3: clasificar
+  ui.goToStep(3, 'Clasificar ONTI/BCRA');
+  ui.pushProgress('Clasificando hallazgos contra los 38 criterios ONTI…');
+  const { findings } = classifyFindings(axeResults, { includeExtended: config.includeExtended });
+  const scores = calculateScore(findings, { axeResults, includeExtended: config.includeExtended });
+  ui.pushResult(buildWcagCard(scores.wcag_section, { includeExtended: config.includeExtended }));
+  ui.pushResult(buildBestPracticesCard(scores.best_practices));
+  const s = scores.wcag_section;
+  ui.pushLog(`Compliance WCAG: ${s.ok} OK, ${s.nok} NOK, ${s.a_validar} a validar (de ${s.total}).`, s.nok ? 'warn' : 'ok');
+
+  await gate(ui, 'Clasificación terminada', config.keyboardReview
+    ? 'pruebas de teclado del Agente: recorrido con Tab de cada página para detectar trampas de teclado, orden del foco, foco visible y cambios al recibir el foco.'
+    : 'generar los informes.');
+
+  // Paso 4: pruebas de teclado (opcionales; si la IA falla, se usan las reglas automáticas).
+  if (config.keyboardReview) {
+    ui.goToStep(4, 'Pruebas de teclado del Agente');
+    // Hoja de contactos de cada página: cada parada del Tab con y sin foco, y lo que encontró el Agente.
+    const sheets = axeResults.filter((r) => r.keyboard?.contact_sheet);
+    const showGallery = () => ui.pushStage({
+      type: 'gallery',
+      caption: 'Recorrido con Tab: cada parada sin foco y con foco',
+      items: sheets.map((r) => ({
+        src: `data:image/jpeg;base64,${r.keyboard.contact_sheet}`,
+        caption: shortUrl(r.url),
+        status: keyboard.status(r.url),
+        notes: keyboard.notes(r.url)
+      }))
+    });
+    if (sheets.length > 0) {
+      showGallery();
+      keyboard.onProgress(showGallery);
+    }
+    await keyboard.waitAll('El Agente interpreta los recorridos con teclado');
+    ui.pushLog('Las pruebas de teclado son complementarias: no modifican el compliance WCAG; los criterios 2.1.2, 2.4.3, 2.4.7 y 3.2.1 siguen "a validar".');
+    await gate(ui, 'Pruebas de teclado terminadas', 'generar los informes.');
+  } else {
+    ui.pushLog('Pruebas de teclado del Agente omitidas por configuración.');
   }
-  await askPanel({
+  const usageReport = keyboard.usageReport();
+  await mkdir(outputDir, { recursive: true });
+  await writeFile(path.join(outputDir, 'consumo-ia.json'), JSON.stringify(usageReport, null, 2));
+  if (usageReport.calls > 0) {
+    const cost = usageReport.estimated_cost_usd === null ? 'sin precio conocido' : `≈ US$ ${usageReport.estimated_cost_usd.toLocaleString('es-AR', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}`;
+    ui.pushLog(`Consumo de IA: ${usageReport.total_tokens.toLocaleString('es-AR')} tokens en ${usageReport.calls} llamada(s), ${cost}.`, 'ok');
+  }
+
+  // Paso 5: informes
+  ui.goToStep(5, 'Informes');
+  // Compliance e informes: solo axe-core. Las pruebas de teclado van como sección complementaria.
+  const keyboardResults = keyboard.results();
+  const finalScores = calculateScore(findings, { axeResults, includeExtended: config.includeExtended });
+  ui.pushResult(buildWcagCard(finalScores.wcag_section, { includeExtended: config.includeExtended }));
+  ui.pushResult(buildBestPracticesCard(finalScores.best_practices));
+  const data = {
+    jobId, channel: config.channel, scores: finalScores, findings, keyboardResults, axeResults,
+    urls: axeResults.map((r) => r.url), includeExtended: config.includeExtended,
+    vpat: config.vpat, target: config.target
+  };
+  const generated = [];
+  for (const [i, deliverable] of DELIVERABLES.entries()) {
+    ui.pushProgress(`Generando: ${deliverable.label}`, i + 1, DELIVERABLES.length);
+    try {
+      await generateDeliverable(deliverable.type, data, { outputDir });
+      generated.push(deliverable);
+      ui.pushLog(`${deliverable.label}: listo.`, 'ok');
+    } catch (error) {
+      ui.pushLog(`No se pudo generar ${deliverable.label}: ${friendlyError(error)}`, 'error');
+    }
+  }
+  if (!generated.some((d) => d.type === 'dashboard')) throw new Error('No se pudo generar el score de cumplimiento inicial.');
+  ui.goToStep(6);
+  ui.pushLog(`Informes guardados en ${path.resolve(outputDir)}`, 'ok');
+
+  // Una sola página con los informes embebidos: botones arriba, el informe elegido debajo.
+  const viewable = generated.filter((d) => d.open);
+  await writeFile(path.join(outputDir, 'informes.html'), buildReportViewerHtml({
+    reports: viewable.map((d) => ({ key: d.key, label: d.label, file: d.open }))
+  }));
+
+  // Los informes se ven embebidos en el mismo panel (sin abrir otra ventana): botones arriba y
+  // el informe elegido debajo.
+  ui.serveReports(path.resolve(outputDir));
+  ui.pushStage({ type: 'frame', src: `/informes/informes.html?embed=1#${viewable[0].key}`, caption: 'Informes de la auditoría' });
+  await ui.askPanel({
     kind: 'buttons',
-    text: 'Generar el dashboard ejecutivo final',
-    options: [{ label: 'Siguiente paso →', value: 'continue' }]
-  });
-
-  header(6, 'Generar el dashboard ejecutivo', pushStep);
-  const allFindings = [...findings, ...visualFindings, ...uxFindings];
-  const finalScores = calculateScore(allFindings, { axeResults });
-  const [dashboardPath] = await generateDeliverable(
-    'dashboard',
-    { jobId, channel: 'demo', scores: finalScores, findings: allFindings },
-    { outputDir }
-  );
-  console.log(`Dashboard generado en: ${dashboardPath}`);
-  pushLog('Dashboard ejecutivo generado.');
-  pushStep(7);
-
-  const dashboardServer = serveDirectory(outputDir);
-  await new Promise((resolve) => dashboardServer.listen(0, resolve));
-  const { port: dashboardPort } = dashboardServer.address();
-
-  const dashboardTab = await context.newPage();
-  await dashboardTab.goto(`http://localhost:${dashboardPort}/`);
-  console.log('\nDashboard abierto en el navegador. Esta es la vista que recibiría el directorio.');
-
-  await askPanel({
-    kind: 'buttons',
-    text: 'Demo terminada',
+    final: true,
+    text: 'Auditoría terminada · elegí un informe para verlo debajo',
+    subtitle: `Todos los archivos, incluidos los Excel, quedaron en ${path.resolve(outputDir)}`,
     options: [{ label: 'Cerrar demo', value: 'close' }]
   });
-
-  dashboardServer.close();
-  controlServer.close();
-  await panelBrowser.close();
-  await browser.close();
 }
 
-main().catch((error) => {
+async function main() {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.error('Falta ANTHROPIC_API_KEY en el entorno - la demo necesita llamar a Claude para interpretar las pruebas de teclado (paso 4).');
+    process.exit(1);
+  }
+
+  const server = createDemoServer();
+  server.setDiscoverHandler(async (url) => ({ urls: await discoverSite(url) }));
+  const controlServer = http.createServer(server.app);
+  await new Promise((resolve) => controlServer.listen(0, resolve));
+  const { port: controlPort } = controlServer.address();
+
+  // Una sola ventana, a pantalla completa. Las capturas (vista previa y páginas escaneadas con
+  // los problemas marcados) se sacan con un navegador invisible y se muestran dentro del panel.
+  const panelBrowser = await chromium.launch({ headless: false, args: ['--start-fullscreen'] });
+  const panelPage = await (await panelBrowser.newContext({ viewport: null })).newPage();
+  await panelPage.goto(`http://localhost:${controlPort}/panel`);
+
+  const stageBrowser = await chromium.launch();
+  const stageContext = await stageBrowser.newContext({ viewport: { width: 1280, height: 800 } });
+  const stage = createStage(stageContext);
+  server.setPreviewHandler(async (values) => {
+    const target = previewTarget(values);
+    if (!target) throw new Error('Todavía no hay nada para mostrar');
+    let url = target.target;
+    if (target.kind === 'local') {
+      const files = await listHtmlFiles(target.target);
+      if (files.length === 0) throw new Error('La carpeta no tiene archivos .html');
+      url = toFileUrl(files[0]);
+    }
+    try {
+      return { url, image: await stage.capture(url) };
+    } catch (error) {
+      throw new Error(`No se pudo cargar la vista previa: ${friendlyError(error)}.`);
+    }
+  });
+
+  // Cerrar la ventana no desconecta el navegador (Chromium de Playwright sigue vivo sin ventanas):
+  // hay que escuchar también el cierre de la página, si no la demo queda esperando para siempre
+  // y el portal la sigue viendo "en ejecución".
+  let panelClosed = false;
+  const onPanelClosed = () => {
+    if (panelClosed) return;
+    panelClosed = true;
+    server.cancelPending(new DemoCancelledError());
+  };
+  panelBrowser.on('disconnected', onPanelClosed);
+  panelPage.on('close', onPanelClosed);
+
+  // Estado del stepper compartido por todos los pasos (paso actual + pasos omitidos por config).
+  let currentStep = 0;
+  let skippedSteps = [];
+  const ui = {
+    ...server,
+    setSkipped(steps) { skippedSteps = steps; },
+    goToStep(n, title) {
+      currentStep = n;
+      if (title) header(n, title);
+      server.pushStep(n, { skippedSteps });
+    }
+  };
+
+  console.log('=== Demo: Agente F1 de Compliance de Accesibilidad ===');
+  try {
+    await runDemo(ui, { stage });
+  } catch (error) {
+    const cancelled = error instanceof DemoCancelledError;
+    if (cancelled && panelClosed) {
+      console.log('\nSe cerró la ventana del panel: la demo termina.');
+    } else if (cancelled) {
+      console.log('\nAuditoría cancelada por el presentador.');
+      ui.pushLog('Auditoría cancelada. No se generaron informes nuevos.', 'warn');
+    } else {
+      console.error('\nLa demo se interrumpió por un error:', error);
+      ui.pushLog(friendlyError(error), 'error');
+      server.pushStep(currentStep, { skippedSteps, failed: true });
+      ui.pushFailure(friendlyError(error), 'Revisá la configuración o la conexión y volvé a correr la demo.');
+    }
+    if (!panelClosed) {
+      try {
+        await server.askPanel({
+          kind: 'buttons',
+          final: true,
+          text: cancelled ? 'Auditoría cancelada' : 'La auditoría se detuvo por un error',
+          status: cancelled ? { text: 'Cancelada', tone: 'bad' } : { text: 'Con error', tone: 'bad' },
+          options: [{ label: 'Cerrar demo', value: 'close' }]
+        }, { allowAfterCancel: true });
+      } catch {
+        // El panel se cerró mientras se mostraba el mensaje final.
+      }
+    }
+    if (!panelClosed) process.exitCode = 1;
+  } finally {
+    controlServer.close();
+    await panelBrowser.close().catch(() => {});
+    await stageBrowser.close().catch(() => {});
+  }
+}
+
+// Salida explícita: el crawl de crawlee deja timers internos vivos que impedían que el proceso
+// terminara solo después de "Cerrar demo".
+main().then(() => process.exit(process.exitCode ?? 0), (error) => {
   console.error('\nLa demo se interrumpió por un error:', error.message);
   process.exit(1);
 });

@@ -1,0 +1,22 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Banner de cookies</title>
+<style>button{display:block;margin:20px}button:focus{outline:3px solid #005fcc}
+#cookie-consent{position:fixed;bottom:0;left:0;right:0;background:#222;color:#fff;padding:16px}</style></head>
+<body>
+<button>Inicio</button><button>Productos</button><button>Contacto</button>
+<div id="cookie-consent" role="dialog" aria-label="Uso de cookies">
+  <p>Usamos cookies para mejorar tu experiencia.</p>
+  <button id="aceptar">Aceptar todas</button><button id="rechazar">Rechazar</button>
+</div>
+<script>
+  // El banner encierra el foco mientras está abierto (como los banners modales reales).
+  const banner = document.getElementById('cookie-consent');
+  const [first, last] = [document.getElementById('aceptar'), document.getElementById('rechazar')];
+  first.focus(); first.blur();
+  document.addEventListener('keydown', (e) => {
+    if (!banner.isConnected || e.key !== 'Tab') return;
+    const target = e.shiftKey ? (document.activeElement === first ? last : first) : (document.activeElement === last || !banner.contains(document.activeElement) ? first : last);
+    e.preventDefault(); target.focus();
+  });
+  for (const b of [first, last]) b.addEventListener('click', () => banner.remove());
+</script>
+</body></html>

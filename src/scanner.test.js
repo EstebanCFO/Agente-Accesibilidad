@@ -133,3 +133,46 @@ test('scanUrl captura incomplete[], passes[] e inapplicable[] con su forma compl
   assert.ok(typeof someInapplicable.id === 'string');
   assert.ok(Array.isArray(someInapplicable.tags));
 });
+
+test('scanUrl captura la screenshot como JPEG', async () => {
+  const result = await scanUrl({ url: 'https://example.com', captureScreenshot: true });
+  assert.ok(result.screenshot.startsWith('/9j/'), 'la captura debería ser JPEG');
+});
+
+test('scanUrl guarda rule_impacts de las reglas best-practice (axe no los trae en passes/inapplicable)', async () => {
+  const result = await scanUrl({ url: 'https://example.com' });
+  assert.equal(result.rule_impacts.region, 'moderate');
+  for (const id of Object.keys(result.rule_impacts)) {
+    const all = [...result.violations, ...result.incomplete, ...result.passes, ...result.inapplicable];
+    const tags = all.find((r) => r.id === id)?.tags ?? [];
+    assert.ok(tags.includes('best-practice'), `"${id}" no es best-practice`);
+  }
+});
+
+test('scanUrl con captureKeyboard agrega el recorrido de teclado y la hoja de contactos', async () => {
+  const { pathToFileURL } = await import('node:url');
+  const pathMod = await import('node:path');
+  const url = pathToFileURL(pathMod.resolve('tests/fixtures/keyboard/orden-ok.html')).href;
+  const result = await scanUrl({ url, captureKeyboard: true, waitFor: 'load' });
+  assert.deepEqual(result.keyboard.stops.map((s) => s.name), ['Primero', 'Segundo', 'Tercero']);
+  assert.equal(result.keyboard.ended, 'ciclo');
+  assert.ok(result.keyboard.contact_sheet.startsWith('/9j/'));
+  assert.ok(result.keyboard.stops.every((s) => !('focused_png' in s) && !('unfocused_png' in s)), 'los recortes no viajan en el resultado');
+});
+
+test('scanUrl sin captureKeyboard no recorre con teclado', async () => {
+  const { pathToFileURL } = await import('node:url');
+  const pathMod = await import('node:path');
+  const result = await scanUrl({ url: pathToFileURL(pathMod.resolve('tests/fixtures/keyboard/orden-ok.html')).href, waitFor: 'load' });
+  assert.equal(result.keyboard, undefined);
+});
+
+test('scanUrl con captureKeyboard cierra el banner de cookies antes del recorrido y lo registra', async () => {
+  const { pathToFileURL } = await import('node:url');
+  const pathMod = await import('node:path');
+  const result = await scanUrl({ url: pathToFileURL(pathMod.resolve('tests/fixtures/keyboard/banner-cookies.html')).href, captureKeyboard: true, waitFor: 'load' });
+  assert.deepEqual(result.keyboard.consent_banner, { detected: true, dismissed: true, action: 'Rechazar' });
+  assert.deepEqual(result.keyboard.stops.map((s) => s.name), ['Inicio', 'Productos', 'Contacto']);
+  // axe-core corrió antes, con el banner presente: el banner igual se audita.
+  assert.ok([...result.passes, ...result.violations].some((r) => r.id === 'button-name'));
+});

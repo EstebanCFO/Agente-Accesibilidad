@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveAdditionalPageCount } from './demo-page-selection.js';
+import { resolveAdditionalPageCount, resolveSelectedPages } from './demo-page-selection.js';
 
 test('resolveAdditionalPageCount con respuesta vacía devuelve 0', () => {
   assert.equal(resolveAdditionalPageCount('', 5), 0);
@@ -30,4 +30,14 @@ test('resolveAdditionalPageCount rechaza texto no numérico', () => {
 
 test('resolveAdditionalPageCount rechaza números negativos', () => {
   assert.throws(() => resolveAdditionalPageCount('-1', 5), /Cantidad inválida/);
+});
+
+test('resolveSelectedPages incluye siempre la principal primero', () => {
+  assert.deepEqual(resolveSelectedPages('a', ['b', 'c'], []), ['a']);
+  assert.deepEqual(resolveSelectedPages('a', ['b', 'c'], ['c', 'a']), ['a', 'c']);
+});
+
+test('resolveSelectedPages descarta URLs que no fueron descubiertas y duplicados', () => {
+  assert.deepEqual(resolveSelectedPages('a', ['b'], ['b', 'x', 'b']), ['a', 'b']);
+  assert.deepEqual(resolveSelectedPages('a', ['b'], 'b'), ['a']);
 });

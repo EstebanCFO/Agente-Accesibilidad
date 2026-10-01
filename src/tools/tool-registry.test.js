@@ -5,11 +5,12 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createToolRegistry } from './tool-registry.js';
 import { JobStore } from '../job-store.js';
+import { calculateScore } from '../classification/calculate-score.js';
 
 const CORE_TOOL_NAMES = [
   'validate_config', 'crawl_site', 'validate_url_list', 'scan_url', 'scan_batch',
   'classify_findings', 'calculate_score', 'generate_deliverable', 'consolidate_jobs',
-  'request_clarification', 'log_progress', 'visual_audit', 'ux_compliance_review'
+  'request_clarification', 'log_progress', 'keyboard_review'
 ];
 
 async function setup({ outputPath, anthropicClient } = {}) {
@@ -111,14 +112,10 @@ test('consolidate_jobs agrega 2 jobs completed en un dashboard consolidado', asy
   jobStore.createJob({ job_id: 'job-ios', target: { channel: 'app_ios', mode: 'url_list', urls: ['https://x.test'] }, output: { path: outputPath } });
   const registry = createToolRegistry({ jobStore });
 
-  const scoresHb = {
-    summary: { total_urls_evaluated: 10, onti_criteria_evaluated: 38, onti_criteria_compliant: 38, onti_compliance_percentage: 100, onti_conformance: true, conformance_threshold: 30, score_level_a: 100, score_level_aa: 100 },
-    extended_22: null, by_url: []
-  };
-  const scoresIos = {
-    summary: { total_urls_evaluated: 5, onti_criteria_evaluated: 38, onti_criteria_compliant: 20, onti_compliance_percentage: 52.63, onti_conformance: false, conformance_threshold: 30, score_level_a: 60, score_level_aa: 30 },
-    extended_22: null, by_url: []
-  };
+  const page = (url, passes) => ({ url, violations: [], incomplete: [], passes, inapplicable: [] });
+  const nok = { source: 'axe-core', wcag_criterion: '1.4.3', in_scope: 'onti', review_status: 'confirmado', affected_urls: ['https://x.test'] };
+  const scoresHb = calculateScore([], { axeResults: [page('https://x.test', [{ id: 'color-contrast', tags: ['wcag2aa', 'wcag143'] }])] });
+  const scoresIos = calculateScore([nok], { axeResults: [page('https://x.test', [])] });
 
   await registry.execute('generate_deliverable', { type: 'score', data: { scores: scoresHb } }, 'job-hb');
   await registry.execute('generate_deliverable', { type: 'score', data: { scores: scoresIos } }, 'job-ios');
@@ -129,9 +126,9 @@ test('consolidate_jobs agrega 2 jobs completed en un dashboard consolidado', asy
 
   assert.equal(result.channels.length, 2);
   assert.equal(result.global.channels_total, 2);
-  assert.equal(result.global.channels_conformant, 1);
-  const expected = Math.round(((100 * 10 + 52.63 * 5) / 15) * 100) / 100;
-  assert.equal(result.global.weighted_onti_compliance_percentage, expected);
+  assert.equal(result.global.channels_con_nok, 1);
+  assert.equal(result.global.nok, 1);
+  assert.equal(result.channels[0].ok, 1);
 
   const consolidatedHtml = await readFile(path.join(outputPath, 'consolidated', 'dashboard-consolidado.html'), 'utf8');
   assert.match(consolidatedHtml, /Dashboard Ejecutivo Consolidado/);
@@ -160,70 +157,100 @@ test('execute lanza error para un nombre de tool desconocido', async () => {
   await assert.rejects(() => registry.execute('tool_inexistente', {}, 'job-1'), /Unknown tool/);
 });
 
-function fakeAnthropicClient(toolInput) {
+function fakeAnthropicClient(toolInput, capture = {}) {
   return {
     messages: {
-      create: async () => ({ content: [{ type: 'tool_use', name: 'report_findings', input: toolInput }] })
+      create: async (params) => {
+        capture.params = params;
+        return { content: [{ type: 'tool_use', name: 'report_keyboard_review', input: toolInput }] };
+      }
     }
   };
 }
 
-test('visual_audit delega en runVisualAudit y devuelve visual_findings normalizados', async () => {
-  const anthropicClient = fakeAnthropicClient({
-    findings: [{ wcag_criterion: '1.4.3', severity: 'serious', failure_summary: 'Contraste bajo', remediation_hint: 'Subir contraste' }]
-  });
-  const { registry } = await setup({ anthropicClient });
+const KEYBOARD = {
+  stops: [
+    { index: 1, tag: 'a', role: '', name: 'Inicio', doc_x: 0, doc_y: 0, bbox: { x: 0, y: 0, width: 50, height: 20 }, focus_change_pct: 10, context_change: null },
+    { index: 2, tag: 'button', role: '', name: 'Ingresar', doc_x: 0, doc_y: 50, bbox: { x: 0, y: 50, width: 50, height: 20 }, focus_change_pct: 0, context_change: null }
+  ],
+  ended: 'ciclo', trap: null, contact_sheet: '/9j/FAKE', consent_banner: { detected: true, dismissed: true, action: 'Rechazar' }
+};
 
-  const result = await registry.execute('visual_audit', { url: 'https://a.test', screenshot: 'ZmFrZQ==' }, 'job-1');
-
-  assert.equal(result.visual_findings.length, 1);
-  assert.equal(result.visual_findings[0].source, 'visual_audit');
-});
-
-test('ux_compliance_review delega en runUxComplianceReview y devuelve ux_findings normalizados', async () => {
-  const anthropicClient = fakeAnthropicClient({
-    findings: [{ wcag_criterion: '3.3.1', severity: 'moderate', failure_summary: 'Error solo por color', remediation_hint: 'Agregar texto' }]
-  });
-  const { registry } = await setup({ anthropicClient });
-
-  const result = await registry.execute('ux_compliance_review', { url: 'https://a.test', html: '<form></form>' }, 'job-1');
-
-  assert.equal(result.ux_findings.length, 1);
-  assert.equal(result.ux_findings[0].source, 'ux_review');
-});
-
-test('visual_audit lee screenshot_path del disco y lo manda al cliente como base64', async () => {
-  let capturedParams;
-  const anthropicClient = {
-    messages: {
-      create: async (params) => {
-        capturedParams = params;
-        return { content: [{ type: 'tool_use', name: 'report_findings', input: { findings: [] } }] };
-      }
-    }
-  };
-  const { registry, outputPath } = await setup({ anthropicClient });
-
+async function writeCapture(outputPath, name, content) {
   const capturesDir = path.join(outputPath, 'job-1', 'captures');
   await mkdir(capturesDir, { recursive: true });
-  const tmpFile = path.join(capturesDir, 'shot.png');
-  const fakeBytes = Buffer.from('contenido-de-prueba-no-es-un-png-real');
-  await writeFile(tmpFile, fakeBytes);
+  const file = path.join(capturesDir, name);
+  await writeFile(file, JSON.stringify(content));
+  return file;
+}
 
-  await registry.execute('visual_audit', { url: 'https://a.test', screenshot_path: tmpFile }, 'job-1');
-
-  const imageBlock = capturedParams.messages[0].content.find((b) => b.type === 'image');
-  assert.equal(imageBlock.source.data, fakeBytes.toString('base64'));
+test('ya no expone las herramientas de revisión visual ni de UX', async () => {
+  const { registry } = await setup();
+  const names = registry.schemas.map((s) => s.name);
+  assert.ok(!names.includes('visual_audit'));
+  assert.ok(!names.includes('ux_compliance_review'));
+  const scan = registry.schemas.find((s) => s.name === 'scan_url');
+  assert.ok(scan.input_schema.properties.capture_keyboard);
+  assert.equal(scan.input_schema.properties.capture_screenshot, undefined);
 });
 
-test('visual_audit rechaza un screenshot_path fuera del directorio de capturas del job', async () => {
+test('keyboard_review lee keyboard_path, consulta a la IA y devuelve los 4 criterios', async () => {
+  const capture = {};
+  const anthropicClient = fakeAnthropicClient({
+    orden_del_foco: { estado: 'sin_indicios', paradas: [], motivo: 'Orden lógico' },
+    foco_visible: { estado: 'con_indicios', paradas: [2], motivo: 'Ingresar no muestra foco' }
+  }, capture);
+  const { registry, outputPath } = await setup({ anthropicClient });
+  const keyboardPath = await writeCapture(outputPath, 'kb.json', KEYBOARD);
+
+  const result = await registry.execute('keyboard_review', { url: 'https://a.test', keyboard_path: keyboardPath }, 'job-1');
+
+  assert.equal(result.url, 'https://a.test');
+  assert.equal(result.criteria['2.4.7'].estado, 'con_indicios');
+  assert.equal(result.criteria['2.4.7'].fuente, 'Agente');
+  assert.equal(result.criteria['2.1.2'].estado, 'sin_indicios');
+  assert.deepEqual(result.consent_banner, { detected: true, dismissed: true, action: 'Rechazar' });
+  assert.equal(capture.params.messages[0].content.find((b) => b.type === 'image').source.data, '/9j/FAKE');
+});
+
+test('keyboard_review usa las reglas solas si la IA falla', async () => {
+  const anthropicClient = { messages: { create: async () => { throw new Error('caída'); } } };
+  const { registry, outputPath } = await setup({ anthropicClient });
+  const keyboardPath = await writeCapture(outputPath, 'kb.json', KEYBOARD);
+  const result = await registry.execute('keyboard_review', { url: 'https://a.test', keyboard_path: keyboardPath }, 'job-1');
+  assert.equal(result.criteria['2.4.7'].estado, 'con_indicios');
+  assert.equal(result.criteria['2.4.7'].fuente, 'reglas (sin interpretación del Agente)');
+});
+
+test('keyboard_review rechaza un keyboard_path fuera del directorio de capturas del job', async () => {
   const { registry } = await setup();
   const outsideDir = await mkdtemp(path.join(tmpdir(), 'f1-outside-'));
-  const outsidePath = path.join(outsideDir, 'secret.png');
-  await writeFile(outsidePath, Buffer.from('no-deberia-leerse-nunca'));
-
+  const outsidePath = path.join(outsideDir, 'secret.json');
+  await writeFile(outsidePath, '{}');
   await assert.rejects(
-    () => registry.execute('visual_audit', { url: 'https://a.test', screenshot_path: outsidePath }, 'job-1'),
+    () => registry.execute('keyboard_review', { url: 'https://a.test', keyboard_path: outsidePath }, 'job-1'),
     /directorio de capturas/
   );
+});
+
+test('calculate_score ya no acepta umbral y devuelve conteos', async () => {
+  const { registry } = await setup();
+  const schema = registry.schemas.find((s) => s.name === 'calculate_score');
+  assert.equal(schema.input_schema.properties.conformance_threshold, undefined);
+  assert.doesNotMatch(schema.description, /%/);
+  const result = await registry.execute('calculate_score', { classified_findings: [], axe_results: [] }, 'job-1');
+  assert.equal(result.summary.a_validar, 38);
+  assert.equal('onti_conformance' in result.summary, false);
+});
+
+test('generate_deliverable("vpat") genera vpat-wcag.pdf con la config del job', async () => {
+  const { jobStore, registry } = await setup();
+
+  const result = await registry.execute('generate_deliverable', {
+    type: 'vpat',
+    data: { findings: [], axe_results: [{ url: 'https://x.test', violations: [], incomplete: [], inapplicable: [], passes: [] }] }
+  }, 'job-1');
+
+  assert.equal(path.basename(result.file_path[0]), 'vpat-wcag.pdf');
+  assert.ok(jobStore.getJob('job-1').reports.includes('vpat-wcag.pdf'));
 });

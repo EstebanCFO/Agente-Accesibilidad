@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildInventarioJson, buildInventarioWorkbook } from './inventario-deliverable.js';
+import { buildInventarioJson, buildInventarioWorkbook, buildInventarioHtml } from './inventario-deliverable.js';
 
 function finding(overrides) {
   return {
@@ -59,4 +59,31 @@ test('buildInventarioWorkbook genera las 4 hojas que pide la SPEC §8.3', async 
 
   const headerValues = hallazgos.getRow(1).values;
   assert.ok(headerValues.includes('Estado de revisión'), 'la hoja Hallazgos debe exponer la columna Estado de revisión');
+});
+
+test('buildInventarioHtml lista cada hallazgo ordenado por severidad, con página y remediación', () => {
+  const findings = [
+    finding({ id: 'm', wcag_criterion: '1.4.3', severity: 'moderate', rule_id: 'color-contrast', affected_urls: ['https://a.test/cuentas'] }),
+    finding({ id: 'c', wcag_criterion: '1.1.1', severity: 'critical', rule_id: 'image-alt', element_sample: '<img src="x">' })
+  ];
+  const html = buildInventarioHtml({ jobId: 'job-1', findings, urls: ['https://a.test', 'https://a.test/cuentas'] });
+
+  assert.match(html, /<h1>Inventario de hallazgos<\/h1>/);
+  assert.ok(html.indexOf('image-alt') < html.indexOf('color-contrast'), 'crítico antes que medio');
+  assert.match(html, /\/cuentas/);
+  assert.match(html, /agregar alt/);
+  assert.match(html, /&lt;img src=&quot;x&quot;&gt;/, 'el HTML del elemento se escapa');
+  assert.match(html, /Crítico[\s\S]*1[\s\S]*Medio/);
+});
+
+test('buildInventarioHtml muestra un mensaje cuando no hay hallazgos', () => {
+  const html = buildInventarioHtml({ jobId: 'job-1', findings: [], urls: [] });
+  assert.match(html, /No se detectaron hallazgos/);
+});
+
+test('buildInventarioHtml incluye el análisis complementario del Agente aparte', () => {
+  const complementary = [finding({ id: 'v', source: 'visual_audit', failure_summary: 'Gris sobre gris' })];
+  const html = buildInventarioHtml({ jobId: 'job-1', findings: [], complementaryFindings: complementary, urls: [] });
+  assert.match(html, /Análisis complementario del Agente/);
+  assert.match(html, /Gris sobre gris/);
 });

@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildDashboardHtml } from './dashboard-deliverable.js';
+import { buildDashboardHtml, analyzedTarget } from './dashboard-deliverable.js';
+import { computeWcagSection } from '../classification/wcag-section.js';
+import { buildWcagCard } from '../../scripts/demo-results.js';
+
 
 function baseScores(overrides = {}) {
   return {
@@ -16,77 +19,25 @@ function baseScores(overrides = {}) {
   };
 }
 
-test('buildDashboardHtml muestra CONFORME en verde cuando onti_conformance=true', () => {
-  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: baseScores(), findings: [] });
-  assert.match(html, /CONFORME/);
-  assert.doesNotMatch(html, /NO CONFORME/);
-});
-
-test('buildDashboardHtml muestra NO CONFORME cuando onti_conformance=false', () => {
-  const scores = baseScores({ summary: { ...baseScores().summary, onti_conformance: false, onti_criteria_compliant: 20 } });
-  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores, findings: [] });
-  assert.match(html, /NO CONFORME/);
-});
-
-test('buildDashboardHtml muestra el umbral efectivo y la cantidad de criterios N/A cuando hay alguno', () => {
-  const scores = baseScores({ summary: { ...baseScores().summary, onti_criteria_na: 2, effective_conformance_threshold: 28, onti_criteria_evaluated: 36 } });
-  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores, findings: [] });
-  assert.match(html, /ajustado a ≥ 28\/36/);
-  assert.match(html, /2 criterio\(s\) no aplican/);
-});
-
 test('buildDashboardHtml omite el bloque de capa extendida cuando extended_22 es null', () => {
   const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: baseScores(), findings: [] });
   assert.doesNotMatch(html, /Capa extendida WCAG 2\.2/);
 });
 
 test('buildDashboardHtml incluye el bloque de capa extendida rotulado como no exigido', () => {
-  const scores = baseScores({ extended_22: { criteria_evaluated: 18, criteria_compliant: 18, compliance_percentage: 100, by_criterion: [] } });
+  const scores = baseScores({ extended_22: { total: 18, ok: 3, nok: 1, a_validar: 14 } });
   const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores, findings: [] });
   assert.match(html, /Capa extendida WCAG 2\.2/);
   assert.match(html, /No exigida por la Circular BCRA/);
+  assert.match(html, /3 OK · 1 NOK/);
+  assert.match(html, /14 a validar \(de 18\)/);
+  assert.doesNotMatch(html, /Criterios conformes|NaN|undefined%/);
 });
 
 test('buildDashboardHtml no menciona "ONTI" en ningún lado (el dashboard hace referencia a la Circular BCRA)', () => {
   const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: baseScores(), findings: [] });
   assert.doesNotMatch(html, /ONTI/);
   assert.match(html, /Circular BCRA/);
-});
-
-test('buildDashboardHtml muestra el resumen de cumplimiento de los 38 criterios (Circular BCRA)', () => {
-  const findings = [
-    { wcag_criterion: '1.1.1', wcag_description: 'Contenido no textual', in_scope: 'onti', severity: 'critical', occurrences: 1 }
-  ];
-  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: baseScores(), findings });
-  assert.match(html, /Cumplimiento de los 38 criterios WCAG — Circular BCRA/);
-  assert.match(html, /Conformes<\/td><td>37<\/td>/);
-  assert.match(html, /No conformes<\/td><td>1<\/td>/);
-  assert.doesNotMatch(html, />No aplica</);
-});
-
-test('buildDashboardHtml: findings de la capa extendida no afectan el cumplimiento de los 38 criterios ONTI', () => {
-  const findings = [
-    { wcag_criterion: '2.5.8', wcag_description: 'Target size', in_scope: 'extended_22', severity: 'moderate', occurrences: 99 }
-  ];
-  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: baseScores(), findings });
-  assert.match(html, /Conformes<\/td><td>38<\/td>/);
-  assert.match(html, /No conformes<\/td><td>0<\/td>/);
-});
-
-test('buildDashboardHtml muestra la fila "No aplica" solo cuando hay criterios N/A', () => {
-  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: baseScores(), findings: [], naCriteria: ['1.2.1', '1.2.2'] });
-  assert.match(html, />No aplica</);
-  assert.match(html, /No aplica<\/td><td>2<\/td>/);
-  assert.match(html, /Conformes<\/td><td>36<\/td>/);
-});
-
-test('buildDashboardHtml: un criterio con un finding real nunca queda "No aplica" aunque esté en naCriteria', () => {
-  const findings = [
-    { wcag_criterion: '1.2.1', wcag_description: 'Solo audio', in_scope: 'onti', severity: 'moderate', occurrences: 1 }
-  ];
-  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: baseScores(), findings, naCriteria: ['1.2.1'] });
-  assert.match(html, /No conformes<\/td><td>1<\/td>/);
-  assert.doesNotMatch(html, />No aplica</);
 });
 
 test('buildDashboardHtml incluye los 4 Principios WCAG con sus Pautas', () => {
@@ -125,18 +76,135 @@ test('buildDashboardHtml no depende de red (sin <script src> ni <link> externos)
   assert.doesNotMatch(html, /<link[^>]+href="https?:/i);
 });
 
-test('buildDashboardHtml incluye la distribución por módulo', () => {
-  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: baseScores(), findings: [] });
-  assert.match(html, /Distribución por módulo/);
-  assert.match(html, /home-banking/);
+test('buildDashboardHtml muestra el resultado por página con el path (sin módulos)', () => {
+  const findings = [{ wcag_criterion: '1.1.1', in_scope: 'onti', severity: 'critical', occurrences: 1, affected_urls: ['https://a.test/home-banking/pago'] }];
+  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: baseScores(), findings });
+  assert.match(html, /Resultado por página/);
+  assert.match(html, />\/home-banking\/pago<\/td>/);
+  assert.doesNotMatch(html, /Distribución por módulo/);
 });
 
-test('buildDashboardHtml muestra conteos reales cuando hay findings de visual_audit/ux_review', () => {
-  const findings = [
-    { wcag_criterion: '1.4.3', wcag_description: 'Contraste', in_scope: 'onti', severity: 'serious', occurrences: 1, source: 'visual_audit' },
-    { wcag_criterion: '3.3.1', wcag_description: 'Identificación de errores', in_scope: 'onti', severity: 'moderate', occurrences: 1, source: 'ux_review' }
-  ];
-  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: baseScores(), findings });
-  assert.doesNotMatch(html, /No disponible — los skills externos/);
-  assert.match(html, /Visual \(rams\)/);
+test('analyzedTarget: una URL, varias del mismo sitio y carpeta local', () => {
+  assert.deepEqual(analyzedTarget(['https://banco.test/cuentas']), { text: 'https://banco.test/cuentas', href: 'https://banco.test/cuentas' });
+  assert.deepEqual(analyzedTarget(['https://banco.test/', 'https://banco.test/cuentas']), { text: 'https://banco.test', href: 'https://banco.test' });
+  assert.deepEqual(analyzedTarget(['file:///C:/sitio/a.html', 'file:///C:/sitio/sub/b.html']), { text: 'C:/sitio/', href: null });
+  assert.equal(analyzedTarget([]), null);
+});
+
+test('buildDashboardHtml muestra la URL analizada en el encabezado', () => {
+  const html = buildDashboardHtml({ jobId: 'j', channel: 'home_banking', scores: baseScores(), findings: [] });
+  assert.match(html, /URL analizada:<\/strong> <a href="https:\/\/a\.test\/home-banking\/pago">/);
+});
+
+// Página con 3.1.1 verificado (regla aprobada), 1.1.1 con un problema y 1.2.1 sin audio/video.
+const PAGE = {
+  url: 'https://a.test/home-banking/pago', violations: [], incomplete: [],
+  passes: [{ id: 'html-has-lang', tags: ['wcag2a', 'wcag311'] }, { id: 'region', tags: ['best-practice'] }],
+  inapplicable: [{ id: 'audio-caption', tags: ['wcag2a', 'wcag121'] }]
+};
+const NOK_111 = { wcag_criterion: '1.1.1', wcag_description: 'Contenido no textual', in_scope: 'onti', severity: 'critical', occurrences: 1, review_status: 'confirmado', affected_urls: [PAGE.url] };
+
+function sectionScores(findings = [NOK_111]) {
+  return baseScores({ wcag_section: computeWcagSection(findings, { axeResults: [PAGE] }) });
+}
+
+test('buildDashboardHtml: el bloque superior muestra los mismos números que la tarjeta del panel', () => {
+  const scores = sectionScores();
+  const card = buildWcagCard(scores.wcag_section);
+  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores, findings: [NOK_111] });
+  assert.match(html, /Score de cumplimiento — Circular BCRA/);
+  assert.ok(html.includes(card.value), `falta "${card.value}"`);
+  assert.ok(html.includes(card.detail), `falta "${card.detail}"`);
+  assert.equal(card.value, '1 OK · 1 NOK');
+});
+
+test('buildDashboardHtml no emite veredicto, umbral ni porcentaje de cumplimiento', () => {
+  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: sectionScores(), findings: [NOK_111] });
+  assert.doesNotMatch(html, /CONFORME/);
+  assert.doesNotMatch(html, /umbral regulatorio/i);
+  assert.doesNotMatch(html, /de criterios conformes/);
+});
+
+test('buildDashboardHtml desglosa los "a validar" por motivo en la tabla de los 38 criterios', () => {
+  const scores = sectionScores();
+  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores, findings: [NOK_111] });
+  const count = (code) => scores.wcag_section.by_criterion.filter((c) => c.reason.code === code).length;
+  assert.match(html, /OK<\/td><td>1<\/td>/);
+  assert.match(html, /NOK<\/td><td>1<\/td>/);
+  assert.match(html, new RegExp(`A validar — requiere tecnología asistiva</td><td>${count('requiere_asistiva')}</td>`));
+  assert.match(html, new RegExp(`A validar — sin elementos evaluables</td><td>${count('sin_elementos')}</td>`));
+  assert.match(html, new RegExp(`A validar — sin audio ni video detectado</td><td>${count('sin_multimedia')}</td>`));
+  assert.doesNotMatch(html, /No aplica<\/td><td>/);
+});
+
+test('buildDashboardHtml lista cada criterio a validar o no aplicable con su motivo', () => {
+  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: sectionScores(), findings: [NOK_111] });
+  assert.match(html, /Criterios a validar y no aplicables/);
+  assert.match(html, /1\.2\.1[\s\S]*?A validar[\s\S]*?No se detectó audio ni video en la página evaluada: confirmar manualmente/);
+  assert.match(html, /2\.4\.7[\s\S]*?Requiere tecnología asistiva: navegación solo con teclado/);
+});
+
+test('buildDashboardHtml calcula la sección desde findings y axeResults si scores no la trae', () => {
+  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: baseScores(), findings: [NOK_111], axeResults: [PAGE] });
+  const card = buildWcagCard(computeWcagSection([NOK_111], { axeResults: [PAGE] }));
+  assert.ok(html.includes(card.value));
+  assert.ok(html.includes(card.detail));
+});
+
+test('buildDashboardHtml: findings de la capa extendida no cuentan en los 38 criterios', () => {
+  const extended = { wcag_criterion: '2.5.8', in_scope: 'extended_22', severity: 'moderate', occurrences: 9, review_status: 'confirmado' };
+  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: sectionScores([extended]), findings: [extended] });
+  assert.match(html, /NOK<\/td><td>0<\/td>/);
+});
+
+test('buildDashboardHtml incluye el anexo de reglas evaluadas por página cuando hay axeResults', () => {
+  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: sectionScores(), findings: [NOK_111], axeResults: [PAGE] });
+  assert.match(html, /Reglas evaluadas por página/);
+  assert.match(html, /\/home-banking\/pago[\s\S]*?<td>0<\/td><td>0<\/td><td>1<\/td><td>1<\/td><td>1<\/td>/);
+});
+
+const KB = (estado2_4_7) => ({
+  url: PAGE.url,
+  criteria: {
+    '2.1.2': { estado: 'sin_indicios', paradas: [], motivo: 'El foco recorrió 5 elemento(s) sin quedar encerrado', fuente: 'reglas' },
+    '2.4.3': { estado: 'sin_indicios', paradas: [], motivo: 'Orden lógico', fuente: 'Agente' },
+    '2.4.7': { estado: estado2_4_7, paradas: [2], motivo: 'Ingresar no muestra indicador de foco', fuente: 'Agente' },
+    '3.2.1': { estado: 'sin_indicios', paradas: [], motivo: 'Sin cambios', fuente: 'reglas' }
+  }
+});
+
+test('buildDashboardHtml muestra la sección de pruebas de teclado con puntaje y estado por página', () => {
+  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: sectionScores(), findings: [NOK_111], keyboardResults: [KB('con_indicios')] });
+  assert.match(html, /Pruebas de teclado del Agente/);
+  assert.match(html, /No afecta el compliance/);
+  assert.match(html, /75%/);
+  assert.match(html, /\/home-banking\/pago[\s\S]*?Sin indicios[\s\S]*?Sin indicios[\s\S]*?Con indicios[\s\S]*?Sin indicios/);
+  assert.match(html, /Ingresar no muestra indicador de foco/);
+});
+
+test('buildDashboardHtml suma la evidencia de teclado al motivo de los criterios a validar', () => {
+  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: sectionScores(), findings: [NOK_111], keyboardResults: [KB('con_indicios')] });
+  assert.match(html, /2\.4\.7[\s\S]*?Requiere tecnología asistiva: navegación solo con teclado · Prueba de teclado del Agente: con indicios en 1 de 1 página/);
+  assert.match(html, /2\.1\.2[\s\S]*?Prueba de teclado del Agente: sin indicios en 1 página/);
+});
+
+test('buildDashboardHtml sin pruebas de teclado lo dice y no inventa evidencia', () => {
+  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: sectionScores(), findings: [NOK_111] });
+  assert.match(html, /No se ejecutaron las pruebas de teclado del Agente/);
+  assert.doesNotMatch(html, /Prueba de teclado del Agente:/);
+});
+
+test('buildDashboardHtml: la nota de pautas usa NOK y a validar, no "no conforme" ni "no evaluados"', () => {
+  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: sectionScores(), findings: [NOK_111] });
+  const nota = html.slice(html.indexOf('Cumplimiento por Principio y Pauta WCAG'), html.indexOf('Principio 1:'));
+  assert.doesNotMatch(nota, /no conforme|no evaluados/);
+  assert.match(nota, /NOK/);
+});
+
+test('buildDashboardHtml aclara qué banner de cookies se cerró antes del recorrido o cuál no se pudo cerrar', () => {
+  const cerrado = { ...KB('sin_indicios'), consent_banner: { detected: true, dismissed: true, action: 'Rechazar' } };
+  const abierto = { ...KB('sin_indicios'), url: 'https://a.test/otra', consent_banner: { detected: true, dismissed: false, action: null } };
+  const html = buildDashboardHtml({ jobId: 'job-1', channel: 'home_banking', scores: sectionScores(), findings: [NOK_111], keyboardResults: [cerrado, abierto] });
+  assert.match(html, /Se cerró un banner de cookies \(Rechazar\) antes del recorrido en: \/home-banking\/pago/);
+  assert.match(html, /No se pudo cerrar el banner de cookies en: \/otra/);
 });

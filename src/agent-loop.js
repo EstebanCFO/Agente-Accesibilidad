@@ -2,7 +2,7 @@ function buildInitialPrompt(config) {
   return [
     `Sos el cerebro del Agente F1 de compliance de accesibilidad digital.`,
     `Canal: ${config.target.channel}. Modo: ${config.target.mode}.`,
-    `Base normativa: ONTI Disp. 6/2019 (38 criterios WCAG 2.0 A+AA, umbral ${config.wcag.conformance_threshold}/38).`,
+    `Base normativa: ONTI Disp. 6/2019 / Circular BCRA (38 criterios WCAG 2.0 A+AA). El resultado es un conteo OK / NOK / a validar por criterio, sin umbral ni veredicto de conformidad: los criterios que requieren tecnología asistiva o revisión manual quedan "a validar".`,
     `Config completa: ${JSON.stringify(config)}`,
     `Decidí la próxima herramienta a ejecutar. Nunca asumas éxito: evaluá siempre el resultado real de la herramienta anterior.`
   ].join('\n');

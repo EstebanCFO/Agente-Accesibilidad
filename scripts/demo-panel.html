@@ -2,111 +2,708 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<title>Agente F1 - Panel de Control</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agente F1 · Panel de control de la auditoría</title>
 <style>
+  /* CFOTech IT Tools — Design System (Portal de Acceso). Tokens del DS; los colores de TEXTO
+     semánticos (verde/naranja/rojo) se oscurecen un paso respecto del DS para llegar a 4.5:1 (WCAG AA)
+     sobre sus fondos claros: #00875A→#006B47, #C96A00→#9A5100, #C0392B→#A93226. */
+  :root {
+    --navy-dark: #0B1526; --navy: #0A1F44; --navy2: #0D2B5E; --nav-active: #1B3F8A; --blue: #4472C4;
+    --green: #00875A; --green-l: #E3F5EE; --green-a: #4FD1B2; --logo-green: #00A878;
+    --red-ds: #C0392B; --orange-ds: #C96A00;
+    --gray1: #F4F6F9; --gray2: #E8ECF2; --gray3: #C5CDD8; --text: #0D1B2A; --text2: #4A5568; --border: #D1D9E6;
+    /* Alias usados por el panel */
+    --navy-tint: var(--gray2); --green-dark: #006B47; --green-tint: var(--green-l);
+    --ink: var(--text); --muted: var(--text2); --line: var(--border); --field: #6B7280;
+    --bg: var(--gray1); --card: #FFFFFF; --red: #A93226; --red-tint: #FDEDEC; --amber: #9A5100; --amber-tint: #FFF6E8;
+  }
   * { box-sizing: border-box; }
+  html, body { height: 100%; }
   body {
-    margin: 0; font-family: Arial, Helvetica, sans-serif; background: #f4f6f9; color: #14213d;
-    padding: 14px 24px;
+    margin: 0; font-family: 'Segoe UI', system-ui, Arial, sans-serif; background: var(--bg); color: var(--ink);
+    font-size: 13px; display: flex; flex-direction: column; padding: 0; gap: 0; overflow: hidden;
   }
-  .brand { font-size: 13px; font-weight: 700; color: #2a78d6; letter-spacing: 0.4px; margin-bottom: 8px; }
-  .stepper { display: flex; align-items: center; gap: 6px; margin-bottom: 14px; }
-  .step {
-    flex: 1; text-align: center; padding: 6px 4px; border-radius: 6px; font-size: 12px; font-weight: 600;
-    background: #e3e8f0; color: #8a94a6; transition: background 0.3s, color 0.3s;
+  [hidden] { display: none !important; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  :focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
+
+  /* Header del DS: 48px, navy-dark, borde inferior 3px, sin sombra. Los pasos son nav pills. */
+  .header { background: var(--navy-dark); height: 48px; flex-shrink: 0; display: flex; align-items: center; gap: 14px;
+    padding: 0 16px; border-bottom: 3px solid #1C2E48; }
+  .logo { width: 32px; height: 32px; background: var(--logo-green); border-radius: 12px; display: flex; align-items: center;
+    justify-content: center; flex-shrink: 0; }
+  .logo-text { color: #fff; font-size: 11px; font-weight: 700; letter-spacing: -.3px; }
+  .brand { margin: 0; display: flex; flex-direction: column; line-height: 1.2; flex-shrink: 0; }
+  .header-brand-main { font-size: 13px; font-weight: 700; color: #fff; }
+  .header-brand-sub { font-size: 11px; font-weight: 700; color: var(--green-a); }
+  .header nav { flex: 1; min-width: 0; }
+  .top-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .status-chip { font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 20px; background: rgba(255,255,255,.07); color: rgba(255,255,255,.82); }
+  .status-chip.ok { color: var(--green-a); }
+  .status-chip.bad { color: #FFB4AB; }
+
+  /* Botones */
+  button { font: inherit; cursor: pointer; border-radius: 6px; padding: 6px 14px; font-weight: 700; font-size: 13px; }
+  .btn-primary { background: var(--navy); color: #fff; border: 2px solid var(--navy); }
+  .btn-primary:hover { background: var(--navy2); border-color: var(--navy2); }
+  .btn-secondary { background: #fff; color: var(--navy); border: 2px solid var(--navy); }
+  .btn-secondary:hover { background: var(--navy-tint); }
+  .btn-danger { background: #fff; color: var(--red); border: 2px solid var(--red); }
+  .btn-danger:hover { background: var(--red-tint); }
+  .btn-link { background: none; border: none; color: var(--navy); text-decoration: underline; padding: 2px 4px; font-weight: 600; }
+  button:disabled { opacity: .55; cursor: not-allowed; }
+
+  /* Stepper: número + ícono + texto, nunca solo color */
+  .stepper { display: flex; gap: 4px; list-style: none; margin: 0; padding: 0; overflow-x: auto; scrollbar-width: none; }
+  .step { flex: 0 1 auto; min-width: 0; height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 12px; border-radius: 20px;
+    background: rgba(255,255,255,.07); color: rgba(255,255,255,.62); font-size: 13px; font-weight: 500; white-space: nowrap;
+    border: 1px solid transparent; }
+  .step-n { flex-shrink: 0; width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700; border: 1.5px solid currentColor; }
+  .step-label { overflow: hidden; text-overflow: ellipsis; }
+  .step.done { color: rgba(255,255,255,.82); }
+  .step.done .step-n { background: var(--green-a); border-color: var(--green-a); color: var(--navy-dark); }
+  .step.active { background: var(--nav-active); color: #fff; font-weight: 600; box-shadow: 0 0 0 1px rgba(255,255,255,.15) inset; }
+  .step.active .step-n { background: #fff; color: var(--nav-active); border-color: #fff; }
+  .step.skipped { border: 1px dashed rgba(255,255,255,.28); background: transparent; }
+  .step.skipped .step-label::after { content: ' · omitido'; font-weight: 400; }
+  .step.failed { background: var(--red-ds); color: #fff; }
+  .step.active, .step.failed { flex-shrink: 0; }
+  /* Pantallas angostas: los pasos no activos muestran solo el número (el nombre queda en title y para lectores). */
+  @media (max-width: 1600px) {
+    .step:not(.active):not(.failed) { padding: 0 7px; }
+    .step:not(.active):not(.failed) .step-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   }
-  .step.done { background: #0ca30c; color: #fff; }
-  .step.active { background: #2a78d6; color: #fff; }
-  .prompt-text { font-size: 13px; font-weight: 600; color: #14213d; margin-bottom: 8px; min-height: 18px; }
-  .prompt-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 36px; }
-  .prompt-controls button {
-    background: #14213d; color: #fff; border: none; border-radius: 6px;
-    padding: 8px 16px; font-size: 13px; font-weight: 700; cursor: pointer;
-  }
-  .prompt-controls input {
-    padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 13px; min-width: 260px;
-  }
-  .working {
-    display: block; width: 100%; box-sizing: border-box;
-    font-size: 13px; color: #8a94a6; font-style: italic; text-align: center;
-    padding: 8px 0; background: #eef1f6; border-radius: 6px;
-  }
-  .log {
-    font-size: 12px; color: #555; margin-top: 10px; font-family: Consolas, monospace;
-    line-height: 1.5; max-height: 120px; overflow: hidden; white-space: pre-line;
-  }
+
+  /* Cuerpo: trabajo a la izquierda, resultados + actividad a la derecha */
+  .main { flex: 1; min-height: 0; display: flex; gap: 12px; padding: 8px 16px 10px; }
+  .work { flex: 1; min-width: 0; overflow: auto; padding: 2px 2px 2px 0; }
+  .side { width: clamp(290px, 30vw, 400px); display: flex; flex-direction: column; gap: 6px; min-height: 0; overflow-y: auto; }
+  body.configuring .side { display: none; }
+
+  .prompt-title { font-size: 14px; font-weight: 700; color: var(--navy); margin: 0 0 6px; }
+  .prompt-sub { font-size: 12px; color: var(--muted); margin: -4px 0 6px; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+
+  /* Formulario de configuración */
+  .form-grid { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(200px, 2fr) minmax(140px, 1fr) minmax(100px, .7fr); gap: 4px 12px; align-items: start; }
+  .field { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .options { grid-column: span 2; border: 0; margin: 0; padding: 0; min-width: 0; }
+  .options legend { font-size: 12px; font-weight: 600; padding: 0; margin-bottom: 2px; }
+  .options-row { display: flex; flex-direction: column; gap: 8px; min-height: 30px; align-items: flex-start; }
+  .title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+  .title-row .prompt-title { margin: 0; }
+  .inline-error { color: var(--red); font-weight: 700; font-size: 12px; }
+  .field label { font-size: 12px; font-weight: 600; color: var(--ink); }
+  .field input[type=text], .field input[type=url], .field input[type=password], .field input[type=number], .field select {
+    font: inherit; padding: 5px 8px; border: 1.5px solid var(--field); border-radius: 6px; background: #fff; color: var(--ink); min-height: 30px; }
+  .field.check { flex-direction: row; align-items: center; gap: 6px; }
+  .field.check input { width: 20px; height: 20px; accent-color: var(--navy); margin: 0; }
+  .field.check label { font-weight: 500; }
+  .field.check.locked input, .field.check.locked label { cursor: not-allowed; }
+  .field.check.locked label { font-weight: 600; color: var(--navy); }
+  .field.invalid input, .field.invalid select { border-color: var(--red); }
+  .field-error { font-size: 11px; color: var(--red); font-weight: 600; }
+  .field-help { font-size: 11px; color: var(--muted); }
+  .field-label { font-size: 12px; font-weight: 600; color: var(--ink); }
+  .pages-field { grid-column: span 2; }
+  .pages-row { display: flex; align-items: center; gap: 8px; min-height: 30px; }
+  .pages-count { min-width: 44px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
+    border: 1.5px solid var(--field); border-radius: 6px; background: var(--navy-tint); font-weight: 700; color: var(--navy); }
+  .btn-small { padding: 4px 10px; font-size: 12px; background: #fff; color: var(--navy); border: 2px solid var(--navy); min-height: 30px; }
+  .btn-small:hover { background: var(--navy-tint); }
+  .field-help.found { color: var(--green-dark); font-weight: 600; }
+
+  /* Lista de páginas */
+  .checklist { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 2px 12px; margin: 0; padding: 0; list-style: none; }
+  .checklist li { display: flex; align-items: center; gap: 6px; min-height: 24px; }
+  .checklist input { width: 16px; height: 16px; accent-color: var(--navy); flex-shrink: 0; }
+  .checklist label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+  .tag { font-size: 11px; font-weight: 700; color: var(--navy); background: var(--navy-tint); border-radius: 10px; padding: 0 6px; margin-left: 4px; }
+
+  /* Resumen previo */
+  .summary { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 16px; margin: 0 0 10px;
+    padding: 8px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+  .summary div { display: flex; gap: 6px; font-size: 12px; min-width: 0; }
+  .summary dt { font-weight: 700; color: var(--muted); flex-shrink: 0; }
+  .summary dd { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* Avance */
+  .progress { background: var(--card); border: 1.5px solid var(--line); border-radius: 12px; padding: 8px 12px; }
+  .progress-label { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 6px; gap: 8px; }
+  .bar { height: 8px; background: var(--navy-tint); border-radius: 4px; overflow: hidden; }
+  .bar > span { display: block; height: 100%; background: var(--navy); transition: width .4s; }
+  .bar.indeterminate > span { width: 30%; animation: slide 1.4s ease-in-out infinite; }
+  @keyframes slide { 0% { margin-left: -30%; } 100% { margin-left: 100%; } }
+  @media (prefers-reduced-motion: reduce) { .bar.indeterminate > span { animation: none; width: 100%; opacity: .4; } .bar > span { transition: none; } }
+
+  /* Área de visualización: vista previa del sitio, página escaneada con problemas marcados, informes */
+  .stage, .preview { margin: 10px 0 0; background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+    box-shadow: 0 1px 4px rgba(10,31,68,.05); display: flex; flex-direction: column; }
+  .stage figcaption, .preview figcaption { font-size: 12px; font-weight: 600; color: var(--muted); padding: 6px 12px; border-bottom: 1px solid var(--gray2);
+    display: flex; justify-content: space-between; gap: 12px; }
+  .stage img, .preview img { display: block; width: 100%; max-height: calc(100vh - 250px); object-fit: contain; object-position: top center; background: var(--gray1); }
+  .stage iframe { width: 100%; height: calc(100vh - 170px); border: 0; display: block; }
+  /* Galería de la revisión visual: una pestaña por página, captura completa con scroll y observaciones al costado */
+  .gallery-tabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--gray2); }
+  .gallery-tab { padding: 4px 10px; font-size: 12px; font-weight: 600; background: #fff; color: var(--navy); border: 1.5px solid var(--field); border-radius: 16px; min-height: 28px; }
+  .gallery-tab[aria-selected="true"] { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .gallery-tab .badge { margin-left: 6px; font-weight: 700; }
+  .gallery-body { display: grid; grid-template-columns: 1fr 340px; min-height: 0; }
+  .gallery-shot { max-height: calc(100vh - 290px); overflow: auto; background: var(--gray1); }
+  .gallery-shot:focus-visible { outline: 3px solid var(--nav-active); outline-offset: -3px; }
+  .stage .gallery-shot img { max-height: none; object-fit: initial; }
+  .gallery-notes { border-left: 1px solid var(--gray2); padding: 10px 14px; max-height: calc(100vh - 290px); overflow: auto; font-size: 12px; }
+  .gallery-notes h3 { font-size: 13px; margin: 0 0 8px; color: var(--navy); }
+  .gallery-notes ol { margin: 0; padding-left: 18px; display: grid; gap: 8px; }
+  .gallery-notes .crit { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .gallery-notes .pending { color: var(--muted); font-style: italic; }
+  @media (max-width: 1100px) { .gallery-body { grid-template-columns: 1fr; } .gallery-notes { border-left: 0; border-top: 1px solid var(--gray2); } }
+  .preview-empty { padding: 28px 12px; text-align: center; font-size: 13px; color: var(--muted); background: var(--gray1); }
+  .work { display: flex; flex-direction: column; }
+
+  /* Alertas */
+  .alert { border-radius: 12px; padding: 8px 12px; margin-bottom: 8px; border: 1.5px solid; }
+  .alert strong { display: block; }
+  .alert-error { background: var(--red-tint); border-color: var(--red); color: var(--red); }
+  .alert-warn { background: var(--amber-tint); border-color: var(--orange-ds); color: var(--amber); }
+  .confirm-cancel { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #fff; }
+  /* Botones dentro del header oscuro: estilo "btn-exit" del DS */
+  .header button { height: 30px; padding: 0 14px; border-radius: 20px; border: 1px solid rgba(255,255,255,.22);
+    background: transparent; color: rgba(255,255,255,.82); font-size: 12px; font-weight: 500; }
+  .header button:hover { background: rgba(255,255,255,.08); color: #fff; }
+  .header .btn-danger { border-color: rgba(255,180,171,.55); color: #FFB4AB; }
+  .header .btn-danger:hover { background: rgba(192,57,43,.25); color: #fff; }
+
+  /* Resultados parciales */
+  .cards { display: flex; flex-direction: column; gap: 4px; }
+  .cards:empty { display: none; }
+  .card { background: var(--card); border: 1px solid var(--line); box-shadow: 0 1px 4px rgba(10,31,68,.05); border-radius: 12px; padding: 4px 9px; min-width: 0;
+    display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 10px; align-items: center; }
+  .card .card-label { grid-column: 1; grid-row: 1; }
+  .card .card-value { grid-column: 1; grid-row: 2; }
+  .card .card-detail, .card .sev { grid-column: 2; grid-row: 1 / span 2; justify-self: stretch; text-align: right; min-width: 0; }
+  .card.with-ring { grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto auto; }
+  .card.with-ring .ring { grid-column: 1; grid-row: 1 / span 3; }
+  .card.with-ring .card-label { grid-column: 2; } .card.with-ring .card-value { grid-column: 2; }
+  .card.with-ring .card-detail { grid-column: 2 / span 2; grid-row: 3; text-align: left; }
+  .ring { width: 34px; height: 34px; border-radius: 50%; background: conic-gradient(var(--c) calc(var(--p) * 1%), var(--gray2) 0); position: relative; }
+  .ring::after { content: ''; position: absolute; inset: 6px; border-radius: 50%; background: #fff; }
+  .card[data-key=score] { order: 1; } .card[data-key=severity] { order: 2; } .card[data-key=ai] { order: 3; } .card[data-key=usage] { order: 4; }
+  .card-label { font-size: 11px; font-weight: 600; color: var(--muted); }
+  .card-value { font-size: 17px; font-weight: 700; color: var(--navy); line-height: 1.2; }
+  .card-detail { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card.ok { border-color: var(--green); } .card.ok .card-detail { color: var(--green-dark); font-weight: 600; }
+  .card.bad { border-color: var(--red); } .card.bad .card-detail { color: var(--red); font-weight: 600; }
+  .card.warn { border-color: var(--orange-ds); } .card.warn .card-detail { color: var(--amber); font-weight: 600; }
+  .sev { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+  .sev span { font-size: 10.5px; font-weight: 700; border-radius: 10px; padding: 0 6px; border: 1px solid; }
+  .sev .critical { color: var(--red); background: var(--red-tint); }
+  .sev .serious { color: var(--amber); background: var(--amber-tint); }
+  .sev .moderate { color: var(--amber); background: var(--amber-tint); }
+  .sev .minor { color: var(--green-dark); background: var(--green-tint); }
+
+  /* Actividad */
+  .log-wrap { flex: 1; min-height: 64px; display: flex; flex-direction: column; background: var(--card); border: 1.5px solid var(--line); border-radius: 12px; }
+  .log-head { font-size: 11px; font-weight: 700; color: var(--muted); padding: 3px 9px; border-bottom: 1px solid var(--line); text-transform: uppercase; letter-spacing: .04em; }
+  .log { margin: 0; padding: 3px 9px; overflow-y: auto; flex: 1; font-size: 12px; }
+  .log-list { list-style: none; margin: 0; padding: 0; }
+  .log li { display: flex; gap: 6px; padding: 1px 0; line-height: 1.35; }
+  .log .ic { flex-shrink: 0; width: 14px; text-align: center; font-weight: 700; }
+  .log .ok .ic { color: var(--green-dark); } .log .warn .ic { color: var(--amber); } .log .error { color: var(--red); }
+  .log .msg { overflow-wrap: anywhere; }
 </style>
 </head>
-<body>
-  <div class="brand">AGENTE F1 · PANEL DE CONTROL</div>
-  <div class="stepper" id="stepper"></div>
-  <div class="prompt-text" id="prompt-text"></div>
-  <div class="prompt-controls" id="prompt-controls">
-    <span class="working">Esperando conexión...</span>
-  </div>
-  <div class="log" id="log"></div>
+<body class="configuring">
+  <header class="header">
+    <!-- Logotipo: exento del mínimo de contraste (WCAG 1.4.3); colores del DS -->
+    <svg class="logo" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="Logo CFOTech"><rect width="32" height="32" rx="8" fill="#00A878"/><text x="16" y="20" text-anchor="middle" fill="#fff" font-family="Segoe UI, system-ui, sans-serif" font-size="11" font-weight="700" letter-spacing="-.3">CFO</text></svg>
+    <h1 class="brand">
+      <span class="header-brand-main">CFOTech</span>
+      <span class="header-brand-sub">Agente F1 · Accesibilidad</span>
+    </h1>
+    <nav aria-label="Pasos de la auditoría">
+      <ol class="stepper" id="stepper"></ol>
+    </nav>
+    <div class="top-actions">
+      <span class="status-chip" id="status">Conectando…</span>
+      <div id="cancel-zone"></div>
+    </div>
+  </header>
 
-  <script>
-    const stepperEl = document.getElementById('stepper');
-    const promptTextEl = document.getElementById('prompt-text');
-    const promptControlsEl = document.getElementById('prompt-controls');
-    const logEl = document.getElementById('log');
-    const logLines = [];
+  <main class="main">
+    <section class="work" id="work" aria-labelledby="work-title">
+      <div id="alerts"></div>
+      <div id="prompt"><p class="prompt-title" id="work-title">Esperando conexión con el agente…</p></div>
+      <figure class="stage" id="stage" hidden></figure>
+    </section>
+    <aside class="side" aria-label="Resultados y actividad">
+      <div class="cards" id="cards" aria-live="polite"></div>
+      <section class="log-wrap" aria-labelledby="log-title">
+        <h2 class="log-head" id="log-title">Actividad</h2>
+        <div class="log" id="log" role="log" aria-live="off" tabindex="0" aria-labelledby="log-title"><ol class="log-list" id="log-list"></ol></div>
+      </section>
+    </aside>
+  </main>
 
-    function renderSteps(steps) {
-      stepperEl.innerHTML = '';
-      for (const step of steps) {
-        const div = document.createElement('div');
-        div.className = 'step ' + step.state;
-        div.textContent = step.label;
-        stepperEl.appendChild(div);
-      }
+  <div class="sr-only" id="announcer" aria-live="polite" aria-atomic="true"></div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const promptEl = $('prompt'), stepperEl = $('stepper'), logEl = $('log'), logList = $('log-list'), cardsEl = $('cards');
+  const alertsEl = $('alerts'), statusEl = $('status'), cancelZone = $('cancel-zone'), announcer = $('announcer');
+  let currentPrompt = null, finished = false, cancelRequested = false, activeStep = 0;
+  // Pasos que terminan con "Continuar" (escanear, clasificar, revisiones del Agente): mientras
+  // corren, el botón se ve deshabilitado y se habilita cuando llega la pausa del fin de la fase.
+  const GATED_STEPS = new Set([2, 3, 4, 5]);
+
+  function el(tag, attrs = {}, ...children) {
+    const node = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v === undefined || v === null || v === false) continue;
+      if (k === 'class') node.className = v;
+      else if (k === 'text') node.textContent = v;
+      else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
+      else node.setAttribute(k, v === true ? '' : v);
     }
+    for (const c of children.flat()) if (c) node.append(c);
+    return node;
+  }
 
-    function sendAnswer(id, value) {
-      fetch('/answer', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, value })
-      });
-      promptTextEl.textContent = '';
-      promptControlsEl.innerHTML = '<span class="working">Trabajando...</span>';
+  function announce(text) { announcer.textContent = ''; setTimeout(() => { announcer.textContent = text; }, 50); }
+  function setStatus(text, tone = '') { statusEl.textContent = text; statusEl.className = 'status-chip ' + tone; }
+
+  /* ---------- Cancelar ---------- */
+  function renderCancel() {
+    cancelZone.innerHTML = '';
+    if (finished || cancelRequested) return;
+    cancelZone.append(el('button', { class: 'btn-danger', type: 'button', onclick: askCancel, text: 'Cancelar auditoría' }));
+  }
+  function askCancel() {
+    cancelZone.innerHTML = '';
+    const no = el('button', { class: 'btn-secondary', type: 'button', text: 'No, seguir', onclick: renderCancel });
+    const yes = el('button', { class: 'btn-danger', type: 'button', text: 'Sí, cancelar', onclick: doCancel });
+    cancelZone.append(el('div', { class: 'confirm-cancel', role: 'group', 'aria-label': 'Confirmar cancelación' },
+      el('span', { text: '¿Cancelar la auditoría?' }), yes, no));
+    no.focus();
+  }
+  function doCancel() {
+    cancelRequested = true;
+    fetch('/cancel', { method: 'POST' });
+    renderCancel();
+    setStatus('Cancelando…', 'bad');
+    announce('Cancelación solicitada.');
+  }
+
+  /* ---------- Pasos ---------- */
+  const STATE_TEXT = { done: 'completado', active: 'en curso', pending: 'pendiente', skipped: 'omitido', failed: 'con error' };
+  const STATE_ICON = { done: '✓', failed: '!' };
+  function renderSteps({ steps, active }) {
+    stepperEl.innerHTML = '';
+    activeStep = active;
+    for (const s of steps) {
+      stepperEl.append(el('li', { class: 'step ' + s.state, 'aria-current': s.state === 'active' ? 'step' : null, title: s.label },
+        el('span', { class: 'step-n', 'aria-hidden': 'true', text: STATE_ICON[s.state] || String(s.number) }),
+        el('span', { class: 'step-label', text: s.label }),
+        el('span', { class: 'sr-only', text: ` (paso ${s.number} de ${steps.length}, ${STATE_TEXT[s.state]})` })));
     }
+    const current = steps.find((s) => s.number === active);
+    if (steps.some((s) => s.state === 'failed')) {
+      document.body.classList.remove('configuring');
+      setStatus('Con error', 'bad');
+    } else if (current) {
+      document.body.classList.remove('configuring');
+      setStatus(`Paso ${current.number} de ${steps.length}`);
+      announce(`Paso ${current.number} de ${steps.length}: ${current.label}`);
+    } else if (active > steps.length) {
+      document.body.classList.remove('configuring');
+      setStatus('Auditoría terminada', 'ok');
+    }
+  }
 
-    function renderPrompt(prompt) {
-      promptTextEl.textContent = prompt.text;
-      promptControlsEl.innerHTML = '';
-      if (prompt.kind === 'buttons') {
-        for (const option of prompt.options) {
-          const btn = document.createElement('button');
-          btn.textContent = option.label;
-          btn.onclick = () => sendAnswer(prompt.id, option.value);
-          promptControlsEl.appendChild(btn);
+  /* ---------- Respuestas ---------- */
+  function sendAnswer(id, value, workingText = 'Procesando…') {
+    fetch('/answer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, value }) });
+    currentPrompt = null;
+    renderWorking(workingText);
+  }
+  function renderWorking(text) {
+    promptEl.innerHTML = '';
+    promptEl.append(el('div', { class: 'progress' },
+      el('div', { class: 'progress-label' }, el('span', { text })),
+      el('div', { class: 'bar indeterminate', role: 'progressbar', 'aria-label': text }, el('span'))), pendingContinue());
+  }
+  /** "Continuar" deshabilitado mientras corre una fase que termina con pausa. */
+  function pendingContinue() {
+    if (!GATED_STEPS.has(activeStep)) return null;
+    return el('div', { class: 'actions' },
+      el('button', { type: 'button', class: 'btn-primary', text: 'Continuar', disabled: true, title: 'Se habilita cuando termina esta fase' }),
+      el('span', { class: 'prompt-sub', text: 'Se habilita cuando termina esta fase.' }));
+  }
+
+  /* ---------- Prompts ---------- */
+  function title(text, sub) {
+    return [el('h2', { class: 'prompt-title', id: 'work-title', text }), sub ? el('p', { class: 'prompt-sub', text: sub }) : null].filter(Boolean);
+  }
+  function optionButtons(prompt, onPick) {
+    return prompt.options.map((o, i) => el('button', {
+      type: 'button', class: o.variant === 'secondary' ? 'btn-secondary' : o.variant === 'danger' ? 'btn-danger' : 'btn-primary',
+      text: o.label, onclick: () => onPick(o)
+    }));
+  }
+
+  function renderButtons(p) {
+    const buttons = optionButtons(p, (o) => sendAnswer(p.id, o.value, o.workingText));
+    promptEl.append(...title(p.text, p.subtitle), el('div', { class: 'actions' }, buttons));
+    buttons[0]?.focus();
+  }
+
+  function renderText(p) {
+    const input = el('input', { type: 'text', id: 'answer-input', placeholder: p.placeholder || '', 'aria-describedby': p.subtitle ? 'answer-help' : null });
+    const form = el('form', { onsubmit: (e) => { e.preventDefault(); sendAnswer(p.id, input.value); } },
+      el('label', { class: 'prompt-title', for: 'answer-input', id: 'work-title', text: p.text }),
+      p.subtitle ? el('p', { class: 'prompt-sub', id: 'answer-help', text: p.subtitle }) : null,
+      el('div', { class: 'actions' }, input, el('button', { type: 'submit', class: 'btn-primary', text: p.submitLabel || 'Enviar' })));
+    promptEl.append(form);
+    input.focus();
+  }
+
+  function fieldVisible(f, values) {
+    if (!f.showIf) return true;
+    const v = values[f.showIf.name];
+    if ('equals' in f.showIf) return v === f.showIf.equals;
+    if ('notEquals' in f.showIf) return v !== f.showIf.notEquals;
+    if ('in' in f.showIf) return f.showIf.in.includes(v);
+    return true;
+  }
+
+  /**
+   * Campo "Páginas a analizar" (URL del cliente y sitio de referencia): arranca en 1 (la home).
+   * El botón "Analizar sitio" recorre el sitio y suma todas las páginas que encuentra; cuáles se
+   * auditan se elige en el paso siguiente ("Elegí qué páginas auditar").
+   * getUrl: URL del campo visible (la escrita o la del sitio de referencia elegido).
+   */
+  function buildPagesField(f, id, getUrl) {
+    let selected = [];
+    let analyzedUrl = '';
+    const count = el('output', { id, class: 'pages-count', 'aria-live': 'polite', text: '1' });
+    const status = el('span', { class: 'field-help', id: id + '-help', 'aria-live': 'polite', text: 'Solo la página principal' });
+    const button = el('button', { type: 'button', class: 'btn-small', text: 'Analizar sitio' });
+    const update = () => { count.textContent = String(1 + selected.length); };
+
+    const reset = (message) => {
+      selected = []; analyzedUrl = '';
+      status.className = 'field-help'; status.textContent = message;
+      update();
+    };
+
+    async function analyze() {
+      const url = getUrl();
+      if (!/^https?:\/\/\S+$/i.test(url)) { status.className = 'field-help'; status.textContent = 'Ingresá primero una URL válida'; return; }
+      reset('Analizando sitio…');
+      button.disabled = true; button.textContent = 'Analizando sitio…';
+      try {
+        const res = await fetch('/discover', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error);
+        analyzedUrl = url;
+        const others = (data.urls || []).filter((u) => u !== url);
+        if (others.length === 0) {
+          status.textContent = 'No se encontraron otras páginas: se analiza solo la principal';
+        } else {
+          selected = others;
+          status.className = 'field-help found';
+          status.textContent = `${others.length} página(s) encontradas además de la principal. En el paso siguiente elegís cuáles auditar.`;
         }
-      } else if (prompt.kind === 'text') {
-        const input = document.createElement('input');
-        input.type = 'text';
-        if (prompt.placeholder) input.placeholder = prompt.placeholder;
-        const btn = document.createElement('button');
-        btn.textContent = 'Enviar';
-        btn.onclick = () => sendAnswer(prompt.id, input.value);
-        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') btn.click(); });
-        promptControlsEl.appendChild(input);
-        promptControlsEl.appendChild(btn);
-        input.focus();
+      } catch {
+        reset('No se pudo analizar el sitio: se audita solo la principal');
+      } finally {
+        button.disabled = false; button.textContent = 'Analizar sitio';
+        update();
       }
     }
+    button.addEventListener('click', analyze);
+    // Si cambia la URL (escrita, sitio elegido o "Qué auditar"), lo analizado deja de valer.
+    const invalidate = () => { if (analyzedUrl && analyzedUrl !== getUrl()) reset('Solo la página principal'); };
+    queueMicrotask(() => { wrap.parentElement?.addEventListener('input', invalidate); wrap.parentElement?.addEventListener('change', invalidate); });
+    update();
 
-    function appendLog(message) {
-      logLines.push(message);
-      while (logLines.length > 6) logLines.shift();
-      logEl.textContent = logLines.join('\n');
+    const label = el('span', { class: 'field-label', id: id + '-label', text: f.label });
+    count.setAttribute('aria-labelledby', id + '-label');
+    const wrap = el('div', { class: 'field pages-field' }, label,
+      el('div', { class: 'pages-row' }, count, button), status);
+    const input = { type: 'pages', get value() { return analyzedUrl && analyzedUrl === getUrl() ? [...selected] : []; }, focus: () => button.focus() };
+    return { wrap, input };
+  }
+
+  /**
+   * Vista previa embebida de lo que se va a escanear (debajo de "Qué auditar" / sitio). Es una
+   * captura: solo para ver, no se navega. Se actualiza al cambiar el sitio, la URL o el path.
+   */
+  function buildPreview(readValues, grid, inputs) {
+    const status = el('span', { 'aria-live': 'polite' });
+    let body = el('div', { class: 'preview-empty', text: 'Elegí qué auditar para ver la vista previa.' });
+    const figure = el('figure', { class: 'preview' },
+      el('figcaption', {}, el('span', { text: 'Vista previa de lo que se va a escanear (solo para ver)' }), status), body);
+    let seq = 0;
+    let lastKey = '';
+    async function refresh() {
+      const v = readValues();
+      const key = [v.source, v.referenceSite, v.targetUrl, v.targetPath].join('|');
+      if (key === lastKey) return;
+      lastKey = key;
+      const mine = ++seq;
+      status.textContent = 'Cargando…';
+      try {
+        const res = await fetch('/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(v) });
+        const data = await res.json();
+        if (mine !== seq) return;
+        if (!data.ok) throw new Error(data.error);
+        body.replaceWith(body = el('img', { src: data.image, alt: `Vista previa de ${data.url}` }));
+        status.textContent = data.url.replace(/^file:\/\/\/?/, '');
+      } catch (error) {
+        if (mine !== seq) return;
+        body.replaceWith(body = el('div', { class: 'preview-empty', text: error.message || 'No se pudo generar la vista previa.' }));
+        status.textContent = '';
+      }
     }
+    grid.addEventListener('change', refresh);
+    for (const name of ['targetUrl', 'targetPath']) {
+      inputs[name]?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); refresh(); } });
+    }
+    queueMicrotask(refresh);
+    return figure;
+  }
 
-    const events = new EventSource('/events');
-    events.addEventListener('step', (e) => renderSteps(JSON.parse(e.data).steps));
-    events.addEventListener('prompt', (e) => renderPrompt(JSON.parse(e.data)));
-    events.addEventListener('log', (e) => appendLog(JSON.parse(e.data).message));
-  </script>
+  function renderConfig(p) {
+    document.body.classList.add('configuring');
+    const errors = p.errors || {};
+    const hasErrors = Object.keys(errors).length > 0;
+    const inputs = {};
+    const wrappers = {};
+    const grid = el('div', { class: 'form-grid' });
+    const optionsRow = el('div', { class: 'options-row' });
+    const optionsSet = el('fieldset', { class: 'options' }, el('legend', { text: 'Opciones' }), optionsRow);
+    const readValues = () => Object.fromEntries(Object.entries(inputs).map(([n, i]) => [n, i.type === 'checkbox' ? i.checked : i.value]));
+
+    for (const f of p.fields) {
+      const id = 'f-' + f.name, errId = errors[f.name] ? id + '-err' : null;
+      let input;
+      if (f.type === 'select') {
+        input = el('select', { id, name: f.name, 'aria-describedby': errId, 'aria-invalid': errId ? 'true' : null },
+          f.options.map((o) => el('option', { value: o.value, text: o.label, 'data-url': o.url, selected: String(o.value) === String(f.value) })));
+      } else if (f.type === 'checkbox') {
+        // Bloqueado: aria-disabled (no disabled) para que se vea marcado con el color del DS; el click se anula.
+        input = el('input', { id, name: f.name, type: 'checkbox', checked: f.locked ? true : Boolean(f.value),
+          'aria-disabled': f.locked ? 'true' : null, 'aria-describedby': f.locked ? id + '-locked' : null });
+        if (f.locked) input.addEventListener('click', (e) => e.preventDefault());
+      } else if (f.type === 'pages') {
+        const pages = buildPagesField(f, id, () => {
+          const name = [].concat(f.discoverFrom).find((n) => wrappers[n] && !wrappers[n].wrap.hidden);
+          const input = name && inputs[name];
+          if (!input) return '';
+          return (input.tagName === 'SELECT' ? input.selectedOptions[0]?.dataset.url ?? '' : input.value).trim();
+        });
+        inputs[f.name] = pages.input;
+        wrappers[f.name] = { wrap: pages.wrap, field: f };
+        grid.append(pages.wrap);
+        continue;
+      } else {
+        input = el('input', { id, name: f.name, type: f.type, value: f.value ?? '', placeholder: f.placeholder, min: f.min, max: f.max,
+          autocomplete: f.autocomplete, 'aria-describedby': errId, 'aria-invalid': errId ? 'true' : null });
+      }
+      inputs[f.name] = input;
+      const label = el('label', { for: id, text: f.label });
+      let wrap;
+      if (f.type === 'checkbox') {
+        wrap = el('div', { class: 'field check' + (f.locked ? ' locked' : '') }, input, label,
+          f.locked ? el('span', { class: 'sr-only', id: id + '-locked', text: 'Siempre activo' }) : null);
+        if (!optionsSet.isConnected) grid.append(optionsSet);
+        optionsRow.append(wrap);
+      } else {
+        const helpId = f.help && !errId ? id + '-help' : null;
+        if (helpId) input.setAttribute('aria-describedby', helpId);
+        wrap = el('div', { class: 'field' + (errId ? ' invalid' : '') }, label, input,
+          errId ? el('span', { class: 'field-error', id: errId, text: errors[f.name] }) : null,
+          helpId ? el('span', { class: 'field-help', id: helpId, 'aria-live': 'polite', text: f.help }) : null);
+        grid.append(wrap);
+      }
+      wrappers[f.name] = { wrap, field: f };
+    }
+    const refresh = () => {
+      const values = readValues();
+      for (const { wrap, field } of Object.values(wrappers)) wrap.hidden = !fieldVisible(field, values);
+    };
+    grid.addEventListener('change', refresh);
+    refresh();
+
+    const form = el('form', { novalidate: true, 'aria-labelledby': 'work-title', onsubmit: (e) => {
+      e.preventDefault();
+      const values = readValues();
+      for (const { field } of Object.values(wrappers)) if (!fieldVisible(field, values)) delete values[field.name];
+      sendAnswer(p.id, values, 'Validando configuración…');
+    } },
+      el('div', { class: 'title-row' },
+        el('div', {},
+          el('h2', { class: 'prompt-title', id: 'work-title', text: p.text }),
+          hasErrors ? el('span', { class: 'inline-error', role: 'alert', text: 'Revisá los campos marcados en rojo.' })
+            : (p.subtitle ? el('p', { class: 'prompt-sub', style: 'margin:0', text: p.subtitle }) : null)),
+        el('button', { type: 'submit', class: 'btn-primary', text: p.submitLabel || 'Continuar' })),
+      grid, buildPreview(readValues, grid, inputs));
+    promptEl.append(form);
+    const firstInvalid = p.fields.find((f) => errors[f.name]);
+    (firstInvalid ? inputs[firstInvalid.name] : Object.values(inputs)[0]).focus();
+  }
+
+  function renderSummary(p) {
+    const dl = el('dl', { class: 'summary' }, p.rows.map((r) => el('div', {}, el('dt', { text: r.label + ':' }), el('dd', { text: r.value, title: r.value }))));
+    const buttons = optionButtons(p, (o) => sendAnswer(p.id, o.value, o.workingText));
+    promptEl.append(...title(p.text, p.subtitle), dl, el('div', { class: 'actions' }, buttons));
+    buttons[0]?.focus();
+  }
+
+  function renderChecklist(p) {
+    const boxes = [];
+    const list = el('ul', { class: 'checklist' }, p.items.map((item, i) => {
+      const id = 'pg-' + i;
+      const box = el('input', { type: 'checkbox', id, value: item.value, checked: item.checked, disabled: item.locked });
+      boxes.push(box);
+      return el('li', {}, box, el('label', { for: id, title: item.value }, item.label, item.locked ? el('span', { class: 'tag', text: 'principal' }) : null));
+    }));
+    const count = el('span', { class: 'prompt-sub', 'aria-live': 'polite' });
+    const updateCount = () => { count.textContent = `${boxes.filter((b) => b.checked).length} de ${boxes.length} seleccionadas`; };
+    list.addEventListener('change', updateCount);
+    updateCount();
+    const setAll = (v) => { boxes.forEach((b) => { if (!b.disabled) b.checked = v; }); updateCount(); };
+    const submit = (action) => sendAnswer(p.id, { action, selected: boxes.filter((b) => b.checked).map((b) => b.value) }, action === 'continue' ? p.workingText : undefined);
+    const summary = p.summary ? el('dl', { class: 'summary', 'aria-label': 'Configuración elegida' },
+      p.summary.map((r) => el('div', {}, el('dt', { text: r.label + ':' }), el('dd', { text: r.value, title: r.value })))) : null;
+    const group = el('fieldset', { style: 'border:0;margin:0;padding:0' },
+      el('legend', { class: 'prompt-title', id: 'work-title', text: p.text }), summary, list);
+    promptEl.append(group, el('div', { class: 'actions' },
+      el('button', { type: 'button', class: 'btn-primary', text: p.submitLabel || 'Continuar', onclick: () => submit('continue') }),
+      p.backLabel ? el('button', { type: 'button', class: 'btn-secondary', text: p.backLabel, onclick: () => submit('back') }) : null,
+      el('button', { type: 'button', class: 'btn-link', text: 'Marcar todas', onclick: () => setAll(true) }),
+      el('button', { type: 'button', class: 'btn-link', text: 'Ninguna', onclick: () => setAll(false) }),
+      count));
+    boxes.find((b) => !b.disabled)?.focus();
+  }
+
+  const RENDERERS = { buttons: renderButtons, text: renderText, config: renderConfig, summary: renderSummary, checklist: renderChecklist };
+  function renderPrompt(p) {
+    currentPrompt = p;
+    promptEl.innerHTML = '';
+    if (p.final) { finished = true; renderCancel(); }
+    if (p.status) setStatus(p.status.text, p.status.tone);
+    (RENDERERS[p.kind] || renderButtons)(p);
+    announce(p.text);
+  }
+
+  /* ---------- Avance, resultados, actividad, errores ---------- */
+  function renderProgress({ label, current, total }) {
+    if (currentPrompt) return;
+    const pct = total ? Math.round((current / total) * 100) : null;
+    promptEl.innerHTML = '';
+    promptEl.append(el('div', { class: 'progress' },
+      el('div', { class: 'progress-label' }, el('span', { text: label }), total ? el('span', { text: `${current} de ${total}` }) : null),
+      el('div', { class: 'bar' + (total ? '' : ' indeterminate'), role: 'progressbar', 'aria-label': label,
+        'aria-valuemin': total ? 0 : null, 'aria-valuemax': total ? total : null, 'aria-valuenow': total ? current : null },
+        el('span', { style: total ? `width:${pct}%` : null }))), pendingContinue());
+  }
+
+  const cards = {};
+  function renderResult(card) {
+    const ring = card.ring ? el('div', { class: 'ring', 'aria-hidden': 'true',
+      style: `--p:${Math.max(0, Math.min(100, card.ring.pct))};--c:${card.ring.tone === 'ok' ? 'var(--green)' : card.ring.tone === 'bad' ? 'var(--red-ds)' : 'var(--orange-ds)'}` }) : null;
+    const node = el('div', { class: 'card ' + (card.tone || '') + (ring ? ' with-ring' : ''), 'data-key': card.key, title: card.title }, ring,
+      el('div', { class: 'card-label', text: card.label }),
+      el('div', { class: 'card-value', text: card.value }),
+      card.detail ? el('div', { class: 'card-detail', text: card.detail, title: card.detail }) : null,
+      card.breakdown ? el('div', { class: 'sev' }, card.breakdown.map((b) => el('span', { class: b.tone, text: `${b.value} ${b.label}` }))) : null);
+    if (cards[card.key]) cards[card.key].replaceWith(node); else cardsEl.append(node);
+    cards[card.key] = node;
+  }
+
+  const LOG_ICON = { info: '•', ok: '✓', warn: '⚠', error: '✕' };
+  const LOG_TEXT = { info: '', ok: 'OK: ', warn: 'Atención: ', error: 'Error: ' };
+  let stickToBottom = true;
+  logEl.addEventListener('scroll', () => { stickToBottom = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 8; });
+  function appendLog({ message, level = 'info' }) {
+    logList.append(el('li', { class: level },
+      el('span', { class: 'ic', 'aria-hidden': 'true', text: LOG_ICON[level] || '•' }),
+      el('span', { class: 'msg' }, el('span', { class: 'sr-only', text: LOG_TEXT[level] || '' }), message.trim())));
+    if (stickToBottom) requestAnimationFrame(() => { logEl.scrollTop = logEl.scrollHeight; });
+  }
+
+  const stageEl = $('stage');
+  function renderStage(stage) {
+    stageEl.innerHTML = '';
+    if (!stage || stage.type === 'clear') { stageEl.hidden = true; return; }
+    stageEl.hidden = false;
+    stageEl.append(el('figcaption', {}, el('span', { text: stage.caption || '' })));
+    if (stage.type === 'image') stageEl.append(el('img', { src: stage.src, alt: stage.caption || 'Página escaneada' }));
+    if (stage.type === 'frame') stageEl.append(el('iframe', { src: stage.src, title: stage.caption || 'Informes' }));
+    if (stage.type === 'gallery') renderGallery(stage);
+  }
+
+  let galleryIndex = 0;
+  function renderGallery(stage) {
+    const items = stage.items || [];
+    if (items.length === 0) return;
+    galleryIndex = Math.min(galleryIndex, items.length - 1);
+    const item = items[galleryIndex];
+    const tabs = el('div', { class: 'gallery-tabs', role: 'tablist', 'aria-label': 'Páginas analizadas' },
+      ...items.map((it, i) => {
+        const badge = it.status === 'done' ? String(it.notes.length) : it.status === 'pending' ? '…' : it.status === 'failed' ? '!' : '';
+        const tab = el('button', {
+          type: 'button', class: 'gallery-tab', role: 'tab', id: `gal-tab-${i}`,
+          'aria-selected': String(i === galleryIndex), 'aria-controls': 'gal-panel', tabindex: i === galleryIndex ? '0' : '-1',
+          title: it.status === 'done' ? `${it.notes.length} observación(es) del Agente` : it.status === 'failed' ? 'Revisión no disponible' : 'El Agente está revisando esta captura',
+          onclick: () => { galleryIndex = i; renderStage(stage); $(`gal-tab-${i}`)?.focus(); }
+        }, it.caption, badge ? el('span', { class: 'badge', text: badge }) : null);
+        tab.addEventListener('keydown', (e) => {
+          const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+          if (!d) return;
+          e.preventDefault();
+          galleryIndex = (i + d + items.length) % items.length; renderStage(stage); $(`gal-tab-${galleryIndex}`)?.focus();
+        });
+        return tab;
+      }));
+    const notes = item.status === 'pending'
+      ? el('p', { class: 'pending', text: 'El Agente está revisando esta captura…' })
+      : item.status === 'failed'
+        ? el('p', { text: 'No se pudo completar la revisión de esta captura. La auditoría sigue sin ella.' })
+        : item.notes.length === 0
+          ? el('p', { text: item.status === 'none' ? 'Sin captura para revisar.' : 'El Agente no encontró observaciones visuales en esta página.' })
+        : el('ol', {}, ...item.notes.map((n) => el('li', {}, n.text, el('span', { class: 'crit', text: `Criterio ${n.criterion}` }))));
+    const body = el('div', { class: 'gallery-body', role: 'tabpanel', id: 'gal-panel', 'aria-labelledby': `gal-tab-${galleryIndex}` },
+      el('div', { class: 'gallery-shot', tabindex: '0', 'aria-label': `Captura de ${item.caption} (desplazable)` },
+        el('img', { src: item.src, alt: `Captura completa de ${item.caption} que analiza el Agente` })),
+      el('aside', { class: 'gallery-notes', 'aria-label': 'Observaciones del Agente' },
+        el('h3', { text: 'Observaciones del Agente' }), notes));
+    stageEl.append(tabs, body);
+  }
+
+  function renderFailure({ message, hint }) {
+    alertsEl.innerHTML = '';
+    alertsEl.append(el('div', { class: 'alert alert-error', role: 'alert' },
+      el('strong', { text: 'La auditoría se detuvo: ' + message }), hint ? el('span', { text: hint }) : null));
+    setStatus('Con error', 'bad');
+  }
+
+  /* ---------- Conexión ---------- */
+  renderCancel();
+  const events = new EventSource('/events');
+  events.addEventListener('open', () => { if (statusEl.textContent === 'Conectando…' || statusEl.textContent === 'Sin conexión') setStatus('Conectado'); });
+  events.addEventListener('error', () => { if (!finished) setStatus('Sin conexión', 'bad'); });
+  events.addEventListener('step', (e) => renderSteps(JSON.parse(e.data)));
+  events.addEventListener('prompt', (e) => renderPrompt(JSON.parse(e.data)));
+  events.addEventListener('progress', (e) => renderProgress(JSON.parse(e.data)));
+  events.addEventListener('result', (e) => renderResult(JSON.parse(e.data)));
+  events.addEventListener('log', (e) => appendLog(JSON.parse(e.data)));
+  events.addEventListener('failure', (e) => renderFailure(JSON.parse(e.data)));
+  events.addEventListener('stage', (e) => renderStage(JSON.parse(e.data)));
+</script>
 </body>
 </html>

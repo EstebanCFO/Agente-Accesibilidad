@@ -1,13 +1,15 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { buildScoreDeliverable } from './score-deliverable.js';
-import { buildInventarioJson, buildInventarioWorkbook } from './inventario-deliverable.js';
+import { buildInventarioJson, buildInventarioHtml, buildInventarioWorkbook } from './inventario-deliverable.js';
 import { buildRoadmapItems, buildRoadmapJson, buildRoadmapHtml, buildRoadmapWorkbook } from './roadmap-deliverable.js';
-import { buildConformityMatrix, buildModuleConformityMatrix, buildSeverityImpactGrid, buildMatrizJson, buildMatrizHtml, buildMatrizWorkbook } from './matriz-deliverable.js';
-import { computeNaCriteria } from '../classification/na-criteria.js';
+import { buildConformityMatrix, buildSeverityImpactGrid, buildMatrizJson, buildMatrizHtml, buildMatrizWorkbook } from './matriz-deliverable.js';
+import { splitFindings } from '../classification/finding-sources.js';
 import { buildDashboardHtml } from './dashboard-deliverable.js';
 import { buildConsolidatedDashboardHtml } from './consolidated-dashboard-deliverable.js';
 import { buildInformeNarrativoJson, buildInformeNarrativoHtml } from './informe-narrativo-deliverable.js';
+import { buildConsolidatedReportHtml, renderPdf } from './pdf-report-deliverable.js';
+import { buildVpatReportHtml } from './vpat-deliverable.js';
 
 async function writeJsonFile(outputDir, filename, doc) {
   await mkdir(outputDir, { recursive: true });
@@ -31,23 +33,24 @@ const BUILDERS = {
   },
   inventario: async (data, outputDir) => {
     const jsonDoc = buildInventarioJson(data);
+    if (data.complementaryFindings?.length) jsonDoc.complementary_findings = data.complementaryFindings;
     const jsonPath = await writeJsonFile(outputDir, 'inventario-hallazgos.json', jsonDoc);
+    const htmlPath = await writeTextFile(outputDir, 'inventario-hallazgos.html', buildInventarioHtml({
+      jobId: data.jobId, findings: data.findings, complementaryFindings: data.complementaryFindings, urls: data.urls
+    }));
 
     const workbook = await buildInventarioWorkbook(data.findings);
     await mkdir(outputDir, { recursive: true });
     const xlsxPath = path.join(outputDir, 'inventario-hallazgos.xlsx');
     await workbook.xlsx.writeFile(xlsxPath);
 
-    return [jsonPath, xlsxPath];
+    return [jsonPath, htmlPath, xlsxPath];
   },
   roadmap: async (data, outputDir) => {
-    const items = buildRoadmapItems(data.findings, {
-      ontiCriteriaCompliant: data.ontiCriteriaCompliant,
-      conformanceThreshold: data.conformanceThreshold
-    });
+    const items = buildRoadmapItems(data.findings);
 
     const jsonPath = await writeJsonFile(outputDir, 'roadmap-remediacion.json', buildRoadmapJson({ jobId: data.jobId, items }));
-    const htmlPath = await writeTextFile(outputDir, 'roadmap-remediacion.html', buildRoadmapHtml({ jobId: data.jobId, channel: data.channel, items }));
+    const htmlPath = await writeTextFile(outputDir, 'roadmap-remediacion.html', buildRoadmapHtml({ jobId: data.jobId, channel: data.channel, items, urls: data.urls, bestPractices: data.scores?.best_practices ?? null }));
 
     const workbook = await buildRoadmapWorkbook(items);
     await mkdir(outputDir, { recursive: true });
@@ -59,11 +62,8 @@ const BUILDERS = {
   matriz: async (data, outputDir) => {
     const includeExtended = data.includeExtended ?? false;
     const urls = data.urls || [];
-    const rawNaCriteria = computeNaCriteria(data.axe_results ?? data.axeResults ?? [], { includeExtended: false });
-    const findingCriteria = new Set((data.findings || []).filter((f) => f.in_scope === 'onti').map((f) => f.wcag_criterion));
-    const naCriteria = rawNaCriteria.filter((c) => !findingCriteria.has(c));
-    const conformity = buildConformityMatrix({ findings: data.findings, urls, includeExtended, naCriteria });
-    const moduleConformity = buildModuleConformityMatrix({ findings: data.findings, urls, includeExtended, naCriteria });
+    const conformity = buildConformityMatrix({ findings: data.findings, urls, includeExtended, axeResults: data.axe_results ?? data.axeResults ?? [] });
+    const moduleConformity = null;
     const severityImpactGrid = buildSeverityImpactGrid(data.findings);
 
     const jsonPath = await writeJsonFile(outputDir, 'matriz-criticidad.json', buildMatrizJson({
@@ -73,7 +73,7 @@ const BUILDERS = {
       jobId: data.jobId, channel: data.channel, conformity, moduleConformity, severityImpactGrid
     }));
 
-    const workbook = await buildMatrizWorkbook({ conformity, moduleConformity, severityImpactGrid });
+    const workbook = await buildMatrizWorkbook({ conformity, moduleConformity, severityImpactGrid, bestPractices: data.scores?.best_practices ?? null });
     await mkdir(outputDir, { recursive: true });
     const xlsxPath = path.join(outputDir, 'matriz-criticidad.xlsx');
     await workbook.xlsx.writeFile(xlsxPath);
@@ -81,20 +81,37 @@ const BUILDERS = {
     return [jsonPath, htmlPath, xlsxPath];
   },
   dashboard: async (data, outputDir) => {
-    const naCriteria = computeNaCriteria(data.axe_results ?? data.axeResults ?? [], { includeExtended: false });
-    const html = buildDashboardHtml({ jobId: data.jobId, channel: data.channel, scores: data.scores, findings: data.findings, naCriteria });
+
+    const html = buildDashboardHtml({ jobId: data.jobId, channel: data.channel, scores: data.scores, findings: data.findings, complementaryFindings: data.complementaryFindings, urls: data.urls, axeResults: data.axe_results ?? data.axeResults ?? [], includeExtended: data.includeExtended ?? false, keyboardResults: data.keyboardResults ?? [] });
     const filePath = await writeTextFile(outputDir, 'dashboard.html', html);
     return [filePath];
   },
   'informe-narrativo': async (data, outputDir) => {
-    const naCriteria = computeNaCriteria(data.axe_results ?? data.axeResults ?? [], { includeExtended: false });
+
     const jsonPath = await writeJsonFile(outputDir, 'informe-narrativo.json', buildInformeNarrativoJson({
-      jobId: data.jobId, channel: data.channel, findings: data.findings, naCriteria, essentialFlows: data.essentialFlows
+      jobId: data.jobId, channel: data.channel, findings: data.findings, essentialFlows: data.essentialFlows,
+      axeResults: data.axe_results ?? data.axeResults ?? [], scores: data.scores
     }));
     const htmlPath = await writeTextFile(outputDir, 'informe-narrativo.html', buildInformeNarrativoHtml({
-      jobId: data.jobId, channel: data.channel, findings: data.findings, naCriteria, essentialFlows: data.essentialFlows
+      jobId: data.jobId, channel: data.channel, findings: data.findings, complementaryFindings: data.complementaryFindings, essentialFlows: data.essentialFlows, urls: data.urls, scores: data.scores, axeResults: data.axe_results ?? data.axeResults ?? []
     }));
     return [jsonPath, htmlPath];
+  },
+  // Informe consolidado en PDF (portada + metodología + score, inventario y matriz).
+  'informe-pdf': async (data, outputDir) => {
+    const html = buildConsolidatedReportHtml(data);
+    await mkdir(outputDir, { recursive: true });
+    const pdfPath = path.join(outputDir, 'informe-consolidado.pdf');
+    await renderPdf(html, pdfPath, { jobId: data.jobId });
+    return [pdfPath];
+  },
+  // Informe de Conformidad de Accesibilidad basado en VPAT 2.5, edición WCAG (spec 2026-10-01).
+  vpat: async (data, outputDir) => {
+    const html = buildVpatReportHtml(data);
+    await mkdir(outputDir, { recursive: true });
+    const pdfPath = path.join(outputDir, 'vpat-wcag.pdf');
+    await renderPdf(html, pdfPath, { jobId: data.jobId, footerLabel: 'Informe de Conformidad de Accesibilidad (VPAT®)' });
+    return [pdfPath];
   },
   'dashboard-consolidado': async (data, outputDir) => {
     const jsonPath = await writeJsonFile(outputDir, 'score-consolidado.json', {
@@ -121,5 +138,10 @@ export async function generateDeliverable(type, data, { outputDir }) {
   if (!outputDir) {
     throw new Error('generateDeliverable requiere "outputDir"');
   }
-  return builder(data, outputDir);
+  // Regla del proyecto: los informes se basan solo en axe-core. Los hallazgos de la revisión del
+  // Agente (visual/UX) viajan aparte como análisis complementario y no cambian ningún cálculo.
+  // El agente autónomo nombra los findings como los devuelve calculate_score: classified_findings.
+  const { primary, complementary } = splitFindings(data?.findings ?? data?.classified_findings);
+  const complementaryFindings = [...complementary, ...(data?.complementaryFindings ?? [])];
+  return builder({ ...data, findings: primary, complementaryFindings }, outputDir);
 }
