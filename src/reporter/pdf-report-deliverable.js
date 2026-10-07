@@ -1,18 +1,17 @@
 import { criteriaWithoutAutomatedRules, manualReviewFor } from './report-helpers.js';
 import { computeWcagSection } from '../classification/wcag-section.js';
-import { computeNaCriteria } from '../classification/na-criteria.js';
 import { splitFindings } from '../classification/finding-sources.js';
 import { DS_CSS } from './design-system.js';
-import { buildDashboardHtml } from './dashboard-deliverable.js';
 import { buildConformityMatrix, buildSeverityImpactGrid, buildMatrizHtml } from './matriz-deliverable.js';
 import { buildInventarioHtml } from './inventario-deliverable.js';
 
 /**
- * Informe consolidado en PDF: portada + metodología + los tres informes HTML (score de
- * cumplimiento, inventario de hallazgos y matriz de criticidad) en un solo documento imprimible.
+ * Informe consolidado en PDF: portada + metodología + inventario de hallazgos y matriz de criticidad
+ * en un solo documento imprimible. El Score de cumplimiento inicial ya no forma parte del informe:
+ * la portada conserva el resumen OK / NOK / a validar.
  * Reutiliza los mismos builders que los HTML, así que el PDF siempre dice exactamente lo mismo que ellos.
  * Igual que el resto: el contenido se basa solo en axe-core; la revisión del Agente va como
- * análisis complementario (dentro del score y del inventario).
+ * análisis complementario (dentro del inventario).
  */
 
 function escapeHtml(value) {
@@ -98,11 +97,9 @@ export function buildConsolidatedReportHtml(data) {
   const urls = data.urls ?? axeResults.map((r) => r.url);
   const generatedAt = new Date();
 
-  const naCriteria = computeNaCriteria(axeResults, { includeExtended: false });
   const includeExtended = data.includeExtended ?? false;
 
   const sections = [
-    { key: 'dashboard', title: 'Score de cumplimiento inicial', html: buildDashboardHtml({ jobId: data.jobId, channel: data.channel, scores: data.scores, findings, complementaryFindings, naCriteria, urls: data.urls, axeResults, includeExtended, keyboardResults: data.keyboardResults ?? [] }) },
     { key: 'inventario', title: 'Inventario de hallazgos', html: buildInventarioHtml({ jobId: data.jobId, findings, complementaryFindings, urls }) },
     { key: 'matriz', title: 'Matriz de criticidad WCAG 2.0 AA', html: buildMatrizHtml({
       jobId: data.jobId, channel: data.channel,
@@ -111,7 +108,7 @@ export function buildConsolidatedReportHtml(data) {
     }) }
   ].map((s) => ({ ...s, ...sectionFrom(s.html, s.key) }));
 
-  // Misma fuente que la tarjeta "Compliance WCAG" del panel y el Score de cumplimiento inicial.
+  // Misma fuente que la tarjeta "Compliance WCAG" del panel.
   const section = data.scores.wcag_section ?? computeWcagSection(data.findings, { axeResults, includeExtended });
   const na = section.no_aplica ? ` · ${section.no_aplica} ${section.no_aplica === 1 ? 'no aplica' : 'no aplican'}` : '';
   const coverage = criteriaWithoutAutomatedRules();

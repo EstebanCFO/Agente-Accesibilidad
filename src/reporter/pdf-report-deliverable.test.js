@@ -15,12 +15,12 @@ function data() {
   return { jobId: 'job-pdf', channel: 'home_banking', findings, urls: ['https://a.test/cuentas'], scores: calculateScore(findings), axeResults: [] };
 }
 
-test('buildConsolidatedReportHtml arma portada, metodología y las tres secciones', () => {
+test('buildConsolidatedReportHtml arma portada, metodología, inventario y matriz (sin el Score de cumplimiento inicial)', () => {
   const html = buildConsolidatedReportHtml(data());
-  for (const title of ['Informe de Auditoría de Accesibilidad Digital', 'Alcance y metodología', 'Score de cumplimiento inicial', 'Inventario de hallazgos', 'Matriz de criticidad WCAG 2.0 AA']) {
+  for (const title of ['Informe de Auditoría de Accesibilidad Digital', 'Alcance y metodología', 'Inventario de hallazgos', 'Matriz de criticidad WCAG 2.0 AA']) {
     assert.ok(html.includes(title), title);
   }
-  for (const removed of ['Roadmap de remediación', 'Informe general y detalle por criterio']) {
+  for (const removed of ['Roadmap de remediación', 'Informe general y detalle por criterio', 'Score de cumplimiento inicial', 'sec-dashboard']) {
     assert.ok(!html.includes(removed), removed);
   }
   const cover = html.slice(0, html.indexOf('Alcance y metodología'));
@@ -64,8 +64,8 @@ test('generateDeliverable("informe-pdf") genera un PDF válido', { timeout: 6000
 
 test('buildConsolidatedReportHtml: la metodología describe las pruebas de teclado, no la revisión visual/UX', () => {
   const html = buildConsolidatedReportHtml({ ...data(), findings: [axe] });
-  // La metodología es la primera sección del PDF (antes del Score de cumplimiento).
-  const metodologia = html.slice(html.indexOf('<section class="pdf-section">'), html.indexOf('pdf-section sec-dashboard'));
+  // La metodología es la primera sección del PDF (antes del Inventario de hallazgos).
+  const metodologia = html.slice(html.indexOf('<section class="pdf-section">'), html.indexOf('pdf-section sec-inventario'));
   assert.match(metodologia, /Pruebas de teclado del Agente/);
   assert.doesNotMatch(metodologia, /revisión visual y de UX/);
 });
