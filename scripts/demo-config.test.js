@@ -64,19 +64,20 @@ test('validateDemoConfig para una URL audita la home + las páginas elegidas (si
   assert.equal(validateDemoConfig({ ...URL_OK, selectedPages: many }).config.maxPages, MAX_PAGES_LIMIT);
 });
 
-test('validateDemoConfig para una URL usa siempre Home Banking y acepta usuario de prueba', () => {
+test('validateDemoConfig para una URL usa siempre Home Banking y nunca credenciales', () => {
   const { config, errors } = validateDemoConfig({ ...URL_OK, channel: 'app_ios', authUser: 'qa', authPassword: 'x' });
   assert.deepEqual(errors, {});
   assert.equal(config.channel, 'home_banking');
   assert.equal(config.viewport.width, 1280);
-  assert.deepEqual(config.auth, { type: 'basic', config: { username: 'qa', password: 'x' } });
+  assert.equal(config.auth, null);
 });
 
-test('buildConfigFields: sin canal, páginas para URL y sitio de referencia, usuario oculto para referencia y Path solo para carpeta', () => {
+test('buildConfigFields: sin canal ni usuario/contraseña, URL con validación, páginas para URL y referencia y Path solo para carpeta', () => {
   const fields = Object.fromEntries(buildConfigFields().map((f) => [f.name, f]));
   assert.equal(fields.channel, undefined);
-  assert.deepEqual(fields.authUser.showIf, { name: 'source', notEquals: 'reference' });
-  assert.deepEqual(fields.authPassword.showIf, { name: 'source', notEquals: 'reference' });
+  assert.equal(fields.authUser, undefined);
+  assert.equal(fields.authPassword, undefined);
+  assert.equal(fields.targetUrl.check, true);
   assert.equal(fields.maxPages, undefined);
   assert.equal(fields.selectedPages.type, 'pages');
   assert.deepEqual(fields.selectedPages.showIf, { name: 'source', in: ['url', 'reference'] });
@@ -87,18 +88,12 @@ test('buildConfigFields: sin canal, páginas para URL y sitio de referencia, usu
   assert.deepEqual(fields.referenceSite.showIf, { name: 'source', equals: 'reference' });
 });
 
-test('validateDemoConfig exige usuario y contraseña juntos (carpeta local)', () => {
-  const LOCAL = { source: 'local', targetPath: 'C:\\sitio' };
-  assert.ok(validateDemoConfig({ ...LOCAL, authUser: 'test' }).errors.authPassword);
-  assert.ok(validateDemoConfig({ ...LOCAL, authPassword: 'x' }).errors.authUser);
-  const { config } = validateDemoConfig({ ...LOCAL, authUser: 'test', authPassword: 'x' });
-  assert.deepEqual(config.auth, { type: 'basic', config: { username: 'test', password: 'x' } });
-});
-
-test('validateDemoConfig ignora el usuario de prueba con sitio de referencia', () => {
-  const { config, errors } = validateDemoConfig({ source: 'reference', authUser: 'qa', authPassword: 'x' });
-  assert.deepEqual(errors, {});
-  assert.equal(config.auth, null);
+test('validateDemoConfig ignora usuario y contraseña viejos en cualquier origen', () => {
+  for (const raw of [{ source: 'local', targetPath: 'C:\\sitio' }, { source: 'reference' }]) {
+    const { config, errors } = validateDemoConfig({ ...raw, authUser: 'qa', authPassword: 'x' });
+    assert.deepEqual(errors, {});
+    assert.equal(config.auth, null);
+  }
 });
 
 test('validateDemoConfig interpreta checkboxes desmarcados como false', () => {
@@ -117,24 +112,18 @@ test('las pruebas de teclado del Agente reemplazan a las revisiones visual y de 
   assert.deepEqual(summary.find((r) => r.label === 'Pruebas de teclado del Agente'), { label: 'Pruebas de teclado del Agente', value: 'sí' });
 });
 
-test('buildConfigSummary nunca expone la contraseña', () => {
+test('buildConfigSummary no menciona usuario de prueba ni credenciales', () => {
   const { config } = validateDemoConfig({ source: 'local', targetPath: 'C:\\sitio', authUser: 'qa', authPassword: 'secreta123' });
   const text = JSON.stringify(buildConfigSummary(config));
-  assert.ok(text.includes('qa'));
+  assert.ok(!text.includes('Usuario de prueba'));
   assert.ok(!text.includes('secreta123'));
-});
-
-test('buildConfigFields no precarga la contraseña aunque venga en los valores', () => {
-  const fields = buildConfigFields({ authPassword: 'secreta123' });
-  const pwd = fields.find((f) => f.name === 'authPassword');
-  assert.equal(pwd.value, '');
 });
 
 test('buildConfigSummary para una URL muestra la cantidad de páginas elegidas y no el canal', () => {
   const rows = buildConfigSummary(validateDemoConfig({ ...URL_OK, selectedPages: ['https://banco.com/a'] }).config);
   const labels = rows.map((r) => r.label);
   assert.ok(!labels.includes('Canal'));
-  assert.ok(labels.includes('Usuario de prueba'));
+  assert.ok(!labels.includes('Usuario de prueba'));
   assert.equal(rows.find((r) => r.label === 'Páginas').value, '2 (principal + 1 elegida(s))');
 });
 

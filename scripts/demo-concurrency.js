@@ -28,3 +28,36 @@ export function runWithConcurrency(taskFns, limit) {
   launch();
   return promises;
 }
+
+/**
+ * Igual que runWithConcurrency, pero las tareas se suman de a una a medida que aparecen (ej: la
+ * revisión de teclado de cada página arranca apenas esa página termina de escanearse).
+ * run(fn) devuelve una promesa que nunca rechaza: { ok:true, value } o { ok:false, error }.
+ */
+export function createLimiter(limit) {
+  const max = Math.max(1, Math.floor(limit) || 1);
+  const queue = [];
+  let running = 0;
+  function launch() {
+    while (running < max && queue.length > 0) {
+      const { fn, resolve } = queue.shift();
+      running += 1;
+      Promise.resolve()
+        .then(fn)
+        .then((value) => ({ ok: true, value }), (error) => ({ ok: false, error }))
+        .then((outcome) => {
+          running -= 1;
+          resolve(outcome);
+          launch();
+        });
+    }
+  }
+  return {
+    run(fn) {
+      return new Promise((resolve) => {
+        queue.push({ fn, resolve });
+        launch();
+      });
+    }
+  };
+}

@@ -11,6 +11,8 @@ const DEFAULT_EXCLUDE_EXTENSIONS = '**/*.{pdf,jpg,jpeg,png,gif,svg,webp,ico,zip,
  *
  * No hace falta devolver los links rotos encontrados durante el crawl: ese chequeo es
  * responsabilidad de validate_url_list, que corre después sobre el url_list resultante.
+ *
+ * `onPage(url)` (opcional) se llama apenas se descubre cada página, para mostrar el avance.
  */
 export async function crawlSite(rootUrl, options = {}) {
   if (!rootUrl) throw new Error('crawlSite requiere "rootUrl"');
@@ -20,7 +22,8 @@ export async function crawlSite(rootUrl, options = {}) {
     includePatterns = [],
     excludePatterns = [],
     timeoutPerUrl = 30000,
-    strategy = 'same-hostname'
+    strategy = 'same-hostname',
+    onPage
   } = options;
 
   const discovered = new Set();
@@ -30,7 +33,11 @@ export async function crawlSite(rootUrl, options = {}) {
     maxRequestsPerCrawl: maxUrls,
     requestHandlerTimeoutSecs: Math.max(1, Math.ceil(timeoutPerUrl / 1000)),
     async requestHandler({ request, enqueueLinks }) {
-      discovered.add(request.loadedUrl ?? request.url);
+      const url = request.loadedUrl ?? request.url;
+      if (!discovered.has(url)) {
+        discovered.add(url);
+        onPage?.(url);
+      }
       await enqueueLinks({
         strategy,
         globs: includePatterns.length > 0 ? includePatterns : undefined,

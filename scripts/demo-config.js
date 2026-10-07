@@ -31,16 +31,15 @@ const MOBILE_VIEWPORT = { width: 390, height: 844 };
 /**
  * Campos del formulario de configuración, en el formato genérico que renderiza el panel.
  * Qué se ve depende de "Qué auditar":
- *   - Sitio de referencia: el combo del sitio y páginas a analizar, igual que una URL (sin usuario de prueba).
- *   - URL del cliente u otra: URL, páginas a analizar (arranca en 1 = la home; el botón "Analizar
- *     sitio" permite sumar otras páginas desde un desplegable) y usuario de prueba opcional.
- *   - Carpeta local: path y usuario de prueba opcional; se auditan todos los .html de la carpeta.
+ *   - Sitio de referencia: el combo del sitio y páginas a analizar, igual que una URL.
+ *   - URL del cliente u otra: URL (con tilde verde/rojo según si se puede escanear) y páginas a
+ *     analizar (arranca en 1 = la home; el botón "Analizar sitio" permite sumar otras páginas).
+ *   - Carpeta local: path; se auditan todos los .html de la carpeta.
  */
 export function buildConfigFields(values = {}) {
   const v = { ...defaultConfigValues(), ...values };
   const onlyUrl = { name: 'source', equals: 'url' };
   const withPages = { name: 'source', in: ['url', 'reference'] };
-  const withAuth = { name: 'source', notEquals: 'reference' };
   return [
     { name: 'source', type: 'select', label: 'Qué auditar', value: v.source, options: SOURCES },
     {
@@ -48,7 +47,7 @@ export function buildConfigFields(values = {}) {
       options: REFERENCE_SITES.map((site, i) => ({ value: String(i + 1), label: site.label, url: site.url })),
       showIf: { name: 'source', equals: 'reference' }
     },
-    { name: 'targetUrl', type: 'url', label: 'URL', value: v.targetUrl, placeholder: 'https://…', discover: true, showIf: onlyUrl },
+    { name: 'targetUrl', type: 'url', label: 'URL', value: v.targetUrl, placeholder: 'https://…', discover: true, check: true, showIf: onlyUrl },
     { name: 'targetPath', type: 'text', label: 'Path', value: v.targetPath, placeholder: 'C:\\carpeta\\del\\sitio', showIf: { name: 'source', equals: 'local' } },
     // "Analizar sitio" usa la URL del campo visible: la escrita (URL) o la del sitio elegido (referencia).
     { name: 'selectedPages', type: 'pages', label: 'Páginas a analizar', discoverFrom: ['targetUrl', 'referenceSite'], showIf: withPages },
@@ -56,17 +55,14 @@ export function buildConfigFields(values = {}) {
     // para que quede explícito qué se evalúa; no se puede desmarcar.
     { name: 'wcagBase', type: 'checkbox', label: 'Evaluar estándares internacionales WCAG 2.0 (niveles A, AA)', value: true, locked: true },
     { name: 'keyboardReview', type: 'checkbox', label: 'Pruebas de teclado del Agente (trampas de teclado, orden y visibilidad del foco, cambios al recibir el foco)', value: v.keyboardReview },
-    { name: 'includeExtended', type: 'checkbox', label: 'Sumar WCAG 2.2 (score aparte)', value: v.includeExtended },
-    { name: 'authUser', type: 'text', label: 'Usuario de prueba', value: v.authUser, placeholder: 'Opcional', autocomplete: 'off', showIf: withAuth },
-    { name: 'authPassword', type: 'password', label: 'Contraseña', value: '', placeholder: 'Solo si hay usuario', autocomplete: 'off', showIf: withAuth }
+    { name: 'includeExtended', type: 'checkbox', label: 'Sumar WCAG 2.2 (score aparte)', value: v.includeExtended }
   ];
 }
 
 export function defaultConfigValues() {
   return {
     source: 'reference', referenceSite: '1', targetUrl: '', targetPath: '', channel: 'home_banking',
-    maxPages: DEFAULT_MAX_PAGES, selectedPages: [], keyboardReview: true, includeExtended: false,
-    authUser: '', authPassword: ''
+    maxPages: DEFAULT_MAX_PAGES, selectedPages: [], keyboardReview: true, includeExtended: false
   };
 }
 
@@ -115,14 +111,6 @@ export function validateDemoConfig(raw = {}) {
     maxPages = 1 + selectedPages.length;
   }
 
-  // El usuario de prueba se ofrece para URL y carpeta local; con sitio de referencia se ignora
-  // aunque venga cargado de antes (ej: se completó y después se cambió "Qué auditar").
-  const withAuth = source === 'url' || source === 'local';
-  const authUser = withAuth ? String(values.authUser ?? '').trim() : '';
-  const authPassword = withAuth ? String(values.authPassword ?? '') : '';
-  if (authUser && !authPassword) errors.authPassword = 'Falta la contraseña del usuario de prueba.';
-  if (!authUser && authPassword) errors.authUser = 'Falta el usuario de prueba.';
-
   if (Object.keys(errors).length > 0) return { config: null, errors };
 
   const includeExtended = asBool(values.includeExtended);
@@ -138,12 +126,13 @@ export function validateDemoConfig(raw = {}) {
       keyboardReview: asBool(values.keyboardReview),
       wcagTags: includeExtended ? [...BASE_WCAG_TAGS, ...EXTENDED_WCAG_TAGS] : [...BASE_WCAG_TAGS],
       viewport: channel === 'home_banking' ? DESKTOP_VIEWPORT : MOBILE_VIEWPORT,
-      auth: authUser ? { type: 'basic', config: { username: authUser, password: authPassword } } : null
+      // El panel ya no ofrece usuario de prueba: la demo audita solo páginas públicas.
+      auth: null
     }
   };
 }
 
-/** Filas del resumen "antes de ejecutar". La contraseña nunca se muestra. */
+/** Filas del resumen "antes de ejecutar". */
 function pagesSummary(config) {
   if (config.source === 'local') return 'todos los archivos .html';
   if (config.source === 'url' || config.source === 'reference') {
@@ -155,16 +144,13 @@ function pagesSummary(config) {
 
 export function buildConfigSummary(config) {
   const sourceLabel = SOURCES.find((s) => s.value === config.source)?.label ?? config.source;
-  // Solo se resume lo que el presentador eligió: el canal ya no se elige y el usuario de
-  // prueba no existe para sitio de referencia.
-  const rows = [
+  // Solo se resume lo que el presentador eligió (el canal ya no se elige).
+  return [
     { label: 'Qué auditar', value: `${sourceLabel}: ${config.target}` },
     { label: 'Páginas', value: pagesSummary(config) },
     { label: 'Normativa', value: config.includeExtended ? 'ONTI 38 criterios + WCAG 2.2 (aparte)' : 'ONTI 38 criterios (WCAG 2.0 A+AA)' },
     { label: 'Pruebas de teclado del Agente', value: config.keyboardReview ? 'sí' : 'no' }
   ];
-  if (config.source !== 'reference') rows.push({ label: 'Usuario de prueba', value: config.auth ? config.auth.config.username : 'no' });
-  return rows;
 }
 
 /**

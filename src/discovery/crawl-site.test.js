@@ -66,3 +66,10 @@ test('crawlSite con excludePatterns que bloquea todo solo devuelve la raíz', as
 test('crawlSite requiere rootUrl', async () => {
   await assert.rejects(() => crawlSite(), /requiere "rootUrl"/);
 });
+
+test('crawlSite avisa cada página apenas la descubre (onPage), con las mismas URLs que devuelve', async () => {
+  const seen = [];
+  const urlList = await crawlSite(`${baseUrl}/index.html`, { maxUrls: 20, onPage: (url) => seen.push(url) });
+  assert.deepEqual([...seen].sort(), [...urlList].sort());
+  assert.equal(seen[0], `${baseUrl}/index.html`);
+});

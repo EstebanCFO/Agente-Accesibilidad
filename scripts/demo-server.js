@@ -6,10 +6,9 @@ import { createPromptBroker } from './demo-prompt-broker.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Etiquetas cortas y numeradas: a 1024px de ancho las largas se partían en dos líneas desparejas.
-export const STEP_LABELS = [
-  'Relevar páginas', 'Escanear', 'Clasificar ONTI/BCRA',
-  'Pruebas de teclado del Agente', 'Informes'
-];
+// Paso 1 = configuración + selección de páginas; paso 2 = auditoría en vivo (sin pausas, las
+// estaciones de la pantalla muestran el avance); paso 3 = resumen ejecutivo.
+export const STEP_LABELS = ['Relevar páginas', 'Auditoría en vivo', 'Resumen'];
 
 const MAX_LOG_REPLAY = 60;
 
@@ -28,7 +27,7 @@ export function createDemoServer() {
 
   // Último estado conocido: si el panel se conecta tarde o se recarga, se le re-envía todo
   // (antes, un evento emitido antes de que abriera el EventSource se perdía para siempre).
-  const state = { step: null, prompt: null, progress: null, results: {}, logs: [], error: null, cancelled: false, stage: null };
+  const state = { step: null, prompt: null, progress: null, results: {}, logs: [], error: null, cancelled: false, stage: null, run: null };
 
   function writeFrame(res, type, data) {
     res.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -58,6 +57,7 @@ export function createDemoServer() {
     if (state.progress) writeFrame(res, 'progress', state.progress);
     if (state.error) writeFrame(res, 'failure', state.error);
     if (state.stage) writeFrame(res, 'stage', state.stage);
+    if (state.run) writeFrame(res, 'run', state.run);
     if (state.prompt) writeFrame(res, 'prompt', state.prompt);
   });
 
@@ -70,6 +70,9 @@ export function createDemoServer() {
 
   // Botón "Analizar sitio" del formulario: recorre la URL y devuelve sus páginas para elegir
   // cuáles auditar. La lógica real (crawl + caché) la inyecta demo.js.
+  // Responde NDJSON (una línea JSON por evento) para que el panel muestre el avance:
+  // { type: 'page', url } por cada página apenas se descubre, y al final
+  // { type: 'done', ok: true, total, urls } o { type: 'error', ok: false, error }.
   let discoverHandler = null;
   app.post('/discover', async (req, res) => {
     const url = String(req.body?.url ?? '').trim();
@@ -77,16 +80,35 @@ export function createDemoServer() {
       res.status(400).json({ ok: false, error: 'URL inválida' });
       return;
     }
+    res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-cache' });
+    // Si el panel se cierra a mitad del recorrido, el crawl sigue (queda en caché) pero no se escribe más.
+    const send = (event) => { if (!res.writableEnded && !res.destroyed) res.write(`${JSON.stringify(event)}\n`); };
     try {
-      const { urls } = await discoverHandler(url);
-      res.json({ ok: true, total: urls.length, urls });
+      const { urls } = await discoverHandler(url, (page) => send({ type: 'page', url: page }));
+      send({ type: 'done', ok: true, total: urls.length, urls });
     } catch (error) {
-      res.status(502).json({ ok: false, error: error.message });
+      send({ type: 'error', ok: false, error: error.message });
     }
+    res.end();
   });
 
   function setDiscoverHandler(handler) {
     discoverHandler = handler;
+  }
+
+  // Tilde verde/rojo al lado del campo URL: ¿se puede escanear y el sitio lo admite?
+  // La lógica real (checkScannable) la inyecta demo.js.
+  let checkHandler = null;
+  app.post('/check-url', async (req, res) => {
+    const url = String(req.body?.url ?? '').trim();
+    if (!checkHandler) {
+      res.status(503).json({ ok: false, reason: 'Validación no disponible' });
+      return;
+    }
+    res.json(await checkHandler(url));
+  });
+  function setCheckHandler(handler) {
+    checkHandler = handler;
   }
 
   // Vista previa del sitio a escanear, embebida en el formulario (captura headless: los sitios
@@ -173,6 +195,13 @@ export function createDemoServer() {
     pushEvent('stage', stage);
   }
 
+  /** Pantalla en vivo: { target, stations, summary, downloads? } (ver demo-summary.js). */
+  function pushRun(run) {
+    state.run = run;
+    state.progress = null;
+    pushEvent('run', run);
+  }
+
   function pushFailure(message, hint) {
     state.error = { message, hint };
     pushEvent('failure', state.error);
@@ -188,5 +217,5 @@ export function createDemoServer() {
     broker.cancelPending(reason);
   }
 
-  return { app, askPanel, pushStep, pushLog, pushProgress, pushResult, pushFailure, throwIfCancelled, cancelPending, setDiscoverHandler, setPreviewHandler, serveReports, pushStage };
+  return { app, askPanel, pushStep, pushLog, pushProgress, pushResult, pushFailure, throwIfCancelled, cancelPending, setDiscoverHandler, setCheckHandler, setPreviewHandler, serveReports, pushStage, pushRun };
 }

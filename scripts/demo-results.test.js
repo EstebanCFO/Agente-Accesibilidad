@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { countViolationsByImpact, isWcagViolation, buildWcagCard, buildBestPracticesCard, formatPageChecks, buildSeverityCard, buildKeyboardCard, buildUsageCard } from './demo-results.js';
+import { countViolationsByImpact, isWcagViolation, buildWcagCard, buildBestPracticesCard, formatPageChecks, formatPageCompliance, buildSeverityCard, buildKeyboardCard, buildUsageCard } from './demo-results.js';
 
 test('countViolationsByImpact suma por severidad entre páginas e ignora impactos desconocidos', () => {
   const counts = countViolationsByImpact([
@@ -131,4 +131,10 @@ test('buildKeyboardCard aclara las no evaluables y muestra guion sin pares evalu
 test('buildKeyboardCard indica En curso mientras falta alguna página', () => {
   const card = buildKeyboardCard({ score: 100, sin_indicios: 4, con_indicios: 0, no_evaluable: 0 }, { pending: 2 });
   assert.match(card.detail, /2 página\(s\) en curso/);
+});
+
+test('formatPageCompliance muestra total, probados (OK/NOK) y manuales por página', () => {
+  const text = formatPageCompliance({ total: 38, ok: 18, nok: 4, a_validar: 16, no_aplica: 0 });
+  assert.equal(text, 'Compliance WCAG 2.0 (BCRA): 38 criterios — 22 probados automáticamente (18 OK · 4 NOK) · 16 manuales');
+  assert.match(formatPageCompliance({ total: 50, ok: 1, nok: 0, a_validar: 1, no_aplica: 2 }, { includeExtended: true }), /\+ 2\.2: 50 criterios .* 1 manual · 2 no aplican$/);
 });

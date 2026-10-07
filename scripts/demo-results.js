@@ -121,3 +121,15 @@ export function formatPageChecks({ wcag, best_practice: bp }) {
     + `${plural(wcag.pass, 'aprobada', 'aprobadas')} (${plural(wcag.criteria_with_pass, 'criterio con verificación', 'criterios con verificación')})`
     + ` · Buenas prácticas — ${bp.fail + bp.review} a mejorar, ${plural(bp.pass, 'cumple', 'cumplen')}`;
 }
+
+/**
+ * Línea del log por página con el compliance WCAG de esa página sola (ver computeWcagSection):
+ * de los criterios en alcance, cuántos probó el agente automáticamente (y cuántos dieron OK/NOK)
+ * y cuántos quedan para validación manual o con tecnología asistiva.
+ */
+export function formatPageCompliance(section, { includeExtended = false } = {}) {
+  const scope = includeExtended ? 'WCAG 2.0 (BCRA) + 2.2' : 'WCAG 2.0 (BCRA)';
+  const na = section.no_aplica ? ` · ${plural(section.no_aplica, 'no aplica', 'no aplican')}` : '';
+  return `Compliance ${scope}: ${section.total} criterios — ${section.ok + section.nok} probados automáticamente `
+    + `(${section.ok} OK · ${section.nok} NOK) · ${plural(section.a_validar, 'manual', 'manuales')}${na}`;
+}

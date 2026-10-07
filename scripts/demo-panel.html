@@ -96,7 +96,7 @@
   .title-row .prompt-title { margin: 0; }
   .inline-error { color: var(--red); font-weight: 700; font-size: 12px; }
   .field label { font-size: 12px; font-weight: 600; color: var(--ink); }
-  .field input[type=text], .field input[type=url], .field input[type=password], .field input[type=number], .field select {
+  .field input[type=text], .field input[type=url], .field input[type=number], .field select {
     font: inherit; padding: 5px 8px; border: 1.5px solid var(--field); border-radius: 6px; background: #fff; color: var(--ink); min-height: 30px; }
   .field.check { flex-direction: row; align-items: center; gap: 6px; }
   .field.check input { width: 20px; height: 20px; accent-color: var(--navy); margin: 0; }
@@ -114,6 +114,21 @@
   .btn-small { padding: 4px 10px; font-size: 12px; background: #fff; color: var(--navy); border: 2px solid var(--navy); min-height: 30px; }
   .btn-small:hover { background: var(--navy-tint); }
   .field-help.found { color: var(--green-dark); font-weight: 600; }
+  /* Páginas que va encontrando "Analizar sitio": lista chica con scroll, la última siempre visible */
+  .pages-progress { font-size: 11px; color: var(--navy); font-weight: 600; }
+  .pages-live { list-style: none; margin: 4px 0 0; padding: 4px 8px; max-height: 112px; overflow-y: auto;
+    border: 1px solid var(--line); border-radius: 6px; background: var(--card); font-size: 11px; color: var(--muted); }
+  .pages-live li { padding: 1px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pages-live li:last-child { color: var(--ink); }
+  /* Validación de la URL: tilde a la derecha del campo (forma + color + texto, nunca solo color) */
+  .url-row { display: flex; align-items: center; gap: 6px; }
+  .url-row input { flex: 1; min-width: 0; }
+  .url-check { flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700; color: #fff; }
+  .url-check.ok { background: var(--green-dark); }
+  .url-check.bad { background: var(--red); }
+  .url-check.pending { color: var(--muted); border: 1.5px dashed var(--field); }
+  .field-help.bad { color: var(--red); font-weight: 600; }
 
   /* Lista de páginas */
   .checklist { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 2px 12px; margin: 0; padding: 0; list-style: none; }
@@ -190,7 +205,12 @@
   .card.with-ring .card-detail { grid-column: 2 / span 2; grid-row: 3; text-align: left; }
   .ring { width: 34px; height: 34px; border-radius: 50%; background: conic-gradient(var(--c) calc(var(--p) * 1%), var(--gray2) 0); position: relative; }
   .ring::after { content: ''; position: absolute; inset: 6px; border-radius: 50%; background: #fff; }
-  .card[data-key=score] { order: 1; } .card[data-key=severity] { order: 2; } .card[data-key=ai] { order: 3; } .card[data-key=usage] { order: 4; }
+  /* Orden fijo: primero Problemas WCAG, segundo Pruebas de teclado (llegan en distinto momento). */
+  .card[data-key=severity] { order: 1; } .card[data-key=keyboard] { order: 2; } .card[data-key=wcag] { order: 3; }
+  .card[data-key=best-practices] { order: 4; } .card[data-key=usage] { order: 5; }
+  /* Teclado: el título es largo, el detalle ("2 con indicios · 2 sin indicios") va en su propia fila. */
+  .card[data-key=keyboard] { grid-template-rows: auto auto auto; }
+  .card[data-key=keyboard] .card-detail { grid-column: 1 / span 2; grid-row: 3; text-align: left; white-space: normal; }
   .card-label { font-size: 11px; font-weight: 600; color: var(--muted); }
   .card-value { font-size: 17px; font-weight: 700; color: var(--navy); line-height: 1.2; }
   .card-detail { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -213,6 +233,51 @@
   .log .ic { flex-shrink: 0; width: 14px; text-align: center; font-weight: 700; }
   .log .ok .ic { color: var(--green-dark); } .log .warn .ic { color: var(--amber); } .log .error { color: var(--red); }
   .log .msg { overflow-wrap: anywhere; }
+  /* Auditoría en vivo: estaciones que se tildan solas (ícono + texto, nunca solo color) */
+  #run-top:empty, #run-bottom:empty { display: none; }
+  #run-top { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
+  .stations { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; margin: 0; padding: 0; }
+  .station { display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 20px; background: var(--card);
+    border: 1.5px solid var(--line); font-size: 13px; font-weight: 600; color: var(--muted); }
+  .st-ic { width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; border: 1.5px solid currentColor; flex-shrink: 0; }
+  .st-detail { font-weight: 500; font-size: 12px; }
+  .station.done { color: var(--green-dark); border-color: var(--green); }
+  .station.done .st-ic { background: var(--green-dark); border-color: var(--green-dark); color: #fff; }
+  .station.active { color: var(--navy); border-color: var(--nav-active); background: var(--navy-tint); }
+  .station.active .st-ic { animation: pulse 1.2s ease-in-out infinite; }
+  .station.skipped { border-style: dashed; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  @media (prefers-reduced-motion: reduce) { .station.active .st-ic { animation: none; } }
+  body.running .stage img { max-height: calc(100vh - 330px); }
+
+  /* Contadores en vivo = resumen ejecutivo al final */
+  #run-bottom { margin-top: 10px; display: flex; flex-direction: column; gap: 12px; }
+  .tiles { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; min-width: 0;
+    box-shadow: 0 1px 4px rgba(10,31,68,.05); }
+  .tile-label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+  .tile-value { font-size: 20px; font-weight: 700; color: var(--navy); line-height: 1.3; }
+  .tile-sub { font-size: 12px; color: var(--muted); }
+  #run-bottom .ok { color: var(--green-dark); } #run-bottom .nok { color: var(--red); }
+  body.final .side { display: none; }
+  body.final .tile { padding: 14px 16px; }
+  body.final .tile-value { font-size: 30px; }
+  body.final .tile-sub { font-size: 13px; }
+  @media (max-width: 1000px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+  .url-table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; font-size: 13px; }
+  .url-table caption { text-align: left; font-size: 14px; font-weight: 700; color: var(--navy); padding: 0 0 6px; }
+  .url-table th, .url-table td { padding: 7px 12px; border-bottom: 1px solid var(--gray2); text-align: left; }
+  .url-table thead th { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; background: var(--gray1); }
+  .url-table tbody th { font-weight: 600; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .url-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .url-table tbody tr:last-child > * { border-bottom: 0; }
+  .downloads { align-self: flex-start; }
+  .downloads summary { cursor: pointer; display: inline-block; background: var(--navy); color: #fff; font-weight: 700; padding: 6px 14px; border-radius: 6px; }
+  .downloads ul { margin: 6px 0 0; padding: 8px 12px; list-style: none; background: var(--card); border: 1px solid var(--line); border-radius: 12px; display: grid; gap: 4px; }
+  .downloads a { color: var(--navy); font-weight: 600; }
+  .usage-note { margin: 0; font-size: 12px; color: var(--muted); }
 </style>
 </head>
 <body class="configuring">
@@ -236,7 +301,11 @@
     <section class="work" id="work" aria-labelledby="work-title">
       <div id="alerts"></div>
       <div id="prompt"><p class="prompt-title" id="work-title">Esperando conexión con el agente…</p></div>
+      <!-- Auditoría en vivo: estaciones arriba, página en curso al centro (stage), contadores abajo.
+           Al terminar, run-bottom se convierte en el resumen ejecutivo. -->
+      <div id="run-top"></div>
       <figure class="stage" id="stage" hidden></figure>
+      <div id="run-bottom"></div>
     </section>
     <aside class="side" aria-label="Resultados y actividad">
       <div class="cards" id="cards" aria-live="polite"></div>
@@ -254,9 +323,6 @@
   const promptEl = $('prompt'), stepperEl = $('stepper'), logEl = $('log'), logList = $('log-list'), cardsEl = $('cards');
   const alertsEl = $('alerts'), statusEl = $('status'), cancelZone = $('cancel-zone'), announcer = $('announcer');
   let currentPrompt = null, finished = false, cancelRequested = false, activeStep = 0;
-  // Pasos que terminan con "Continuar" (escanear, clasificar, revisiones del Agente): mientras
-  // corren, el botón se ve deshabilitado y se habilita cuando llega la pausa del fin de la fase.
-  const GATED_STEPS = new Set([2, 3, 4, 5]);
 
   function el(tag, attrs = {}, ...children) {
     const node = document.createElement(tag);
@@ -332,14 +398,7 @@
     promptEl.innerHTML = '';
     promptEl.append(el('div', { class: 'progress' },
       el('div', { class: 'progress-label' }, el('span', { text })),
-      el('div', { class: 'bar indeterminate', role: 'progressbar', 'aria-label': text }, el('span'))), pendingContinue());
-  }
-  /** "Continuar" deshabilitado mientras corre una fase que termina con pausa. */
-  function pendingContinue() {
-    if (!GATED_STEPS.has(activeStep)) return null;
-    return el('div', { class: 'actions' },
-      el('button', { type: 'button', class: 'btn-primary', text: 'Continuar', disabled: true, title: 'Se habilita cuando termina esta fase' }),
-      el('span', { class: 'prompt-sub', text: 'Se habilita cuando termina esta fase.' }));
+      el('div', { class: 'bar indeterminate', role: 'progressbar', 'aria-label': text }, el('span'))));
   }
 
   /* ---------- Prompts ---------- */
@@ -390,13 +449,53 @@
     const count = el('output', { id, class: 'pages-count', 'aria-live': 'polite', text: '1' });
     const status = el('span', { class: 'field-help', id: id + '-help', 'aria-live': 'polite', text: 'Solo la página principal' });
     const button = el('button', { type: 'button', class: 'btn-small', text: 'Analizar sitio' });
+    // Avance del análisis: el contador y la lista se ven pero no se anuncian (serían decenas de
+    // anuncios seguidos); el lector de pantalla anuncia "Analizando sitio…" y el resultado final.
+    const progress = el('span', { class: 'pages-progress', hidden: true });
+    const live = el('ul', { class: 'pages-live', 'aria-label': 'Páginas encontradas', hidden: true });
     const update = () => { count.textContent = String(1 + selected.length); };
 
     const reset = (message) => {
       selected = []; analyzedUrl = '';
       status.className = 'field-help'; status.textContent = message;
+      progress.hidden = true; live.hidden = true; live.replaceChildren();
       update();
     };
+
+    // Ruta corta para la lista (/productos/tarjetas); si es de otro host, la URL completa.
+    const pageLabel = (page, main) => {
+      try {
+        const u = new URL(page);
+        return u.host === new URL(main).host ? (u.pathname + u.search) || '/' : page;
+      } catch { return page; }
+    };
+    const addFound = (page, main) => {
+      live.append(el('li', { text: pageLabel(page, main), title: page }));
+      live.hidden = false; progress.hidden = false;
+      progress.textContent = `${live.children.length} página(s) encontradas`;
+      live.scrollTop = live.scrollHeight;
+    };
+
+    // /discover responde NDJSON: { type: 'page', url } a medida que encuentra y al final 'done' o 'error'.
+    async function readDiscovery(res, url) {
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Error al analizar');
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      for (;;) {
+        const { value, done } = await reader.read();
+        buffer += decoder.decode(value, { stream: !done });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (const line of lines.filter((l) => l.trim())) {
+          const event = JSON.parse(line);
+          if (event.type === 'page') addFound(event.url, url);
+          else if (event.type === 'done') return event;
+          else if (event.type === 'error') throw new Error(event.error);
+        }
+        if (done) throw new Error('El análisis terminó sin resultado');
+      }
+    }
 
     async function analyze() {
       const url = getUrl();
@@ -405,8 +504,8 @@
       button.disabled = true; button.textContent = 'Analizando sitio…';
       try {
         const res = await fetch('/discover', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
-        const data = await res.json();
-        if (!data.ok) throw new Error(data.error);
+        const data = await readDiscovery(res, url);
+        progress.hidden = true;
         analyzedUrl = url;
         const others = (data.urls || []).filter((u) => u !== url);
         if (others.length === 0) {
@@ -432,9 +531,50 @@
     const label = el('span', { class: 'field-label', id: id + '-label', text: f.label });
     count.setAttribute('aria-labelledby', id + '-label');
     const wrap = el('div', { class: 'field pages-field' }, label,
-      el('div', { class: 'pages-row' }, count, button), status);
+      el('div', { class: 'pages-row' }, count, button, progress), status, live);
     const input = { type: 'pages', get value() { return analyzedUrl && analyzedUrl === getUrl() ? [...selected] : []; }, focus: () => button.focus() };
     return { wrap, input };
+  }
+
+  /**
+   * Tilde a la derecha del campo URL: verde si la URL (o sub-URL del portal) se puede escanear y
+   * el sitio lo admite, rojo si no, con el motivo debajo. Se valida al dejar de tipear, al salir
+   * del campo o con Enter; nunca bloquea el formulario.
+   */
+  function buildUrlCheck(input, id) {
+    const icon = el('span', { class: 'url-check', 'aria-hidden': 'true', hidden: true });
+    const text = el('span', { class: 'field-help', id: id + '-check', 'aria-live': 'polite' });
+    input.setAttribute('aria-describedby', [input.getAttribute('aria-describedby'), text.id].filter(Boolean).join(' '));
+    let seq = 0, timer = null, lastUrl = '';
+    function show(state, message) {
+      icon.hidden = state === 'idle';
+      icon.className = 'url-check ' + state;
+      icon.textContent = state === 'ok' ? '✓' : state === 'bad' ? '✕' : '…';
+      icon.title = message;
+      text.className = 'field-help' + (state === 'ok' ? ' found' : state === 'bad' ? ' bad' : '');
+      text.textContent = state === 'idle' ? '' : message;
+    }
+    async function check() {
+      clearTimeout(timer);
+      const url = input.value.trim();
+      if (url === lastUrl) return;
+      lastUrl = url;
+      const mine = ++seq;
+      if (!/^https?:\/\/\S+$/i.test(url)) { show('idle', ''); return; }
+      show('pending', 'Validando si se puede escanear…');
+      try {
+        const res = await fetch('/check-url', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+        const data = await res.json();
+        if (mine === seq) show(data.ok ? 'ok' : 'bad', data.ok ? 'Se puede escanear' : 'No se puede escanear: ' + data.reason);
+      } catch {
+        if (mine === seq) show('bad', 'No se pudo validar la URL');
+      }
+    }
+    input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(check, 800); });
+    input.addEventListener('change', check);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') check(); });
+    queueMicrotask(check);
+    return { row: el('div', { class: 'url-row' }, input, icon), text };
   }
 
   /**
@@ -524,7 +664,8 @@
       } else {
         const helpId = f.help && !errId ? id + '-help' : null;
         if (helpId) input.setAttribute('aria-describedby', helpId);
-        wrap = el('div', { class: 'field' + (errId ? ' invalid' : '') }, label, input,
+        const urlCheck = f.check ? buildUrlCheck(input, id) : null;
+        wrap = el('div', { class: 'field' + (errId ? ' invalid' : '') }, label, urlCheck ? urlCheck.row : input, urlCheck?.text,
           errId ? el('span', { class: 'field-error', id: errId, text: errors[f.name] }) : null,
           helpId ? el('span', { class: 'field-help', id: helpId, 'aria-live': 'polite', text: f.help }) : null);
         grid.append(wrap);
@@ -600,6 +741,108 @@
     announce(p.text);
   }
 
+  /* ---------- Auditoría en vivo → resumen ejecutivo ---------- */
+  const runTop = $('run-top'), runBottom = $('run-bottom');
+  const NUM = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 1 });
+  const pct = (v) => (v === null || v === undefined ? '—' : `${NUM.format(v)}%`);
+  const STATION_ICON = { done: '✓', active: '●', pending: '○', skipped: '–' };
+  const STATION_TEXT = { done: 'terminado', active: 'en curso', pending: 'pendiente', skipped: 'omitido' };
+  let lastStations = '';
+
+  function tile(label, value, sub, extra = '') {
+    return el('div', { class: 'tile ' + extra },
+      el('div', { class: 'tile-label', text: label }),
+      el('div', { class: 'tile-value' }, ...[].concat(value)),
+      sub ? el('div', { class: 'tile-sub' }, ...[].concat(sub)) : null);
+  }
+
+  function summaryTiles(s) {
+    const w = s.wcag;
+    const kb = s.keyboard;
+    const bp = s.bestPractices;
+    return el('div', { class: 'tiles' },
+      tile('URLs recorridas', `${s.urls.scanned} de ${s.urls.total}`, s.urls.failed ? `${s.urls.failed} con error` : 'páginas auditadas'),
+      tile(`${s.scope} · ${w ? w.total : '—'} criterios`,
+        w ? [el('span', { class: 'ok', text: `${w.ok} OK` }), ' · ', el('span', { class: 'nok', text: `${w.nok} NOK` })] : '—',
+        w ? `${w.validated} validados por el agente · ${w.manual} requieren QA manual` : 'esperando la primera página', 'wide'),
+      tile('Navegación por teclado',
+        !kb.enabled ? 'Omitida' : kb.score === null ? '—' : pct(kb.score),
+        !kb.enabled ? 'desactivada en la configuración'
+          : `${kb.con_indicios} con indicios · ${kb.sin_indicios} sin indicios${kb.pending ? ` · ${kb.pending} en curso` : ''}`),
+      tile('Buenas prácticas', bp ? pct(bp.score) : '—', bp ? `${bp.cumple} cumplen · ${bp.mejora} a mejorar` : 'complementario, no suma al compliance'));
+  }
+
+  function keyboardCell(k) {
+    if (k === null || k === undefined) return '—';
+    if (k === 'pending') return 'en curso…';
+    const base = k.con_indicios ? `${k.con_indicios} con indicios` : k.sin_indicios ? 'sin indicios' : 'no evaluable';
+    return k.ai_failed ? `${base} (reglas)` : base;
+  }
+  function statusCell(r) {
+    if (r.status === 'failed') return el('span', { class: 'nok' }, el('span', { 'aria-hidden': 'true', text: '✕ ' }), r.error);
+    if (r.status === 'scanning') return 'escaneando…';
+    if (r.status !== 'done') return 'pendiente';
+    return r.wcag?.nok
+      ? el('span', { class: 'nok' }, el('span', { 'aria-hidden': 'true', text: '⚠ ' }), 'con problemas')
+      : el('span', { class: 'ok' }, el('span', { 'aria-hidden': 'true', text: '✓ ' }), 'sin problemas automáticos');
+  }
+  function urlTable(rows) {
+    const num = (v) => el('td', { class: 'num', text: v === undefined ? '—' : String(v) });
+    return el('table', { class: 'url-table' },
+      el('caption', { text: 'Resultado por URL' }),
+      el('thead', {}, el('tr', {}, ...['URL', 'Estado', 'OK', 'NOK', 'QA manual', 'Teclado', 'Buenas prácticas']
+        .map((h, i) => el('th', { scope: 'col', class: i >= 2 && i <= 4 ? 'num' : null, text: h })))),
+      el('tbody', {}, ...rows.map((r) => el('tr', {},
+        el('th', { scope: 'row', title: r.url, text: r.label }),
+        el('td', {}, statusCell(r)),
+        num(r.wcag?.ok), num(r.wcag?.nok), num(r.wcag?.manual),
+        el('td', { text: r.status === 'done' ? keyboardCell(r.keyboard) : '—' }),
+        el('td', { text: r.status === 'done' ? pct(r.bestPractices) : '—' })))));
+  }
+
+  function renderRun(run) {
+    const s = run.summary;
+    document.body.classList.remove('configuring');
+    document.body.classList.toggle('running', !s.final);
+    document.body.classList.toggle('final', s.final);
+    // Mientras corre no hay nada que contestar: se limpia cualquier pregunta anterior (ej: la
+    // selección de páginas si se respondió desde otra pestaña o se reconectó el panel).
+    if (!s.final) { currentPrompt = null; promptEl.innerHTML = ''; }
+
+    runTop.innerHTML = '';
+    if (!s.final) {
+      const stations = el('ol', { class: 'stations', 'aria-label': 'Avance de la auditoría' },
+        ...run.stations.map((st) => el('li', { class: 'station ' + st.state, 'aria-current': st.state === 'active' ? 'step' : null },
+          el('span', { class: 'st-ic', 'aria-hidden': 'true', text: STATION_ICON[st.state] }),
+          el('span', { text: st.label }),
+          st.detail ? el('span', { class: 'st-detail', text: st.detail }) : null,
+          el('span', { class: 'sr-only', text: ` (${STATION_TEXT[st.state]})` }))));
+      runTop.append(el('h2', { class: 'prompt-title', id: 'work-title', text: `Auditando ${run.target}` }), stations);
+      // Se anuncia solo cuando cambia una estación, no en cada contador.
+      const key = run.stations.map((st) => st.state).join();
+      if (key !== lastStations) {
+        const active = run.stations.find((st) => st.state === 'active');
+        if (active) announce(`${active.label} en curso`);
+        lastStations = key;
+      }
+    }
+
+    runBottom.innerHTML = '';
+    runBottom.append(summaryTiles(s));
+    if (s.final) {
+      if (run.downloads?.length) {
+        runBottom.prepend(el('details', { class: 'downloads' },
+          el('summary', { text: 'Informes formales (PDF, Excel, VPAT)' }),
+          el('ul', {}, ...run.downloads.map((d) => el('li', {}, el('a', { href: d.href, target: '_blank', rel: 'noopener', text: d.label }))))));
+      }
+      runBottom.append(urlTable(s.rows));
+      if (s.usage) {
+        runBottom.append(el('p', { class: 'usage-note', text: `Consumo de IA: ${NUM.format(s.usage.tokens)} tokens en ${s.usage.calls} llamada(s)`
+          + (s.usage.cost_usd === null ? '' : ` · ≈ US$ ${s.usage.cost_usd.toFixed(4)}`) }));
+      }
+    }
+  }
+
   /* ---------- Avance, resultados, actividad, errores ---------- */
   function renderProgress({ label, current, total }) {
     if (currentPrompt) return;
@@ -609,7 +852,7 @@
       el('div', { class: 'progress-label' }, el('span', { text: label }), total ? el('span', { text: `${current} de ${total}` }) : null),
       el('div', { class: 'bar' + (total ? '' : ' indeterminate'), role: 'progressbar', 'aria-label': label,
         'aria-valuemin': total ? 0 : null, 'aria-valuemax': total ? total : null, 'aria-valuenow': total ? current : null },
-        el('span', { style: total ? `width:${pct}%` : null }))), pendingContinue());
+        el('span', { style: total ? `width:${pct}%` : null }))));
   }
 
   const cards = {};
@@ -704,6 +947,7 @@
   events.addEventListener('log', (e) => appendLog(JSON.parse(e.data)));
   events.addEventListener('failure', (e) => renderFailure(JSON.parse(e.data)));
   events.addEventListener('stage', (e) => renderStage(JSON.parse(e.data)));
+  events.addEventListener('run', (e) => renderRun(JSON.parse(e.data)));
 </script>
 </body>
 </html>

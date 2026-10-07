@@ -33,3 +33,23 @@ test('runWithConcurrency en paralelo tarda como la más lenta, no como la suma',
   await Promise.all(runWithConcurrency(Array.from({ length: 4 }, () => () => delay(50)), 4));
   assert.ok(Date.now() - start < 150);
 });
+
+test('createLimiter acepta tareas de a una y nunca supera el límite', async () => {
+  const { createLimiter } = await import('./demo-concurrency.js');
+  const limiter = createLimiter(2);
+  let active = 0;
+  let peak = 0;
+  const task = (value) => async () => {
+    active += 1; peak = Math.max(peak, active);
+    await new Promise((r) => setTimeout(r, 20));
+    active -= 1;
+    if (value === 'x') throw new Error('falla');
+    return value;
+  };
+  const first = limiter.run(task('a'));
+  const rest = [limiter.run(task('x')), limiter.run(task('c'))];
+  const outcomes = await Promise.all([first, ...rest]);
+  assert.equal(peak, 2);
+  assert.deepEqual(outcomes.map((o) => o.ok), [true, false, true]);
+  assert.equal(outcomes[2].value, 'c');
+});
